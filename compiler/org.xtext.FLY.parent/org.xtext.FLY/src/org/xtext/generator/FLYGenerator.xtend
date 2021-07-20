@@ -85,6 +85,8 @@ class FLYGenerator extends AbstractGenerator {
 	var id_execution = System.currentTimeMillis
 	var last_func_result = null
 	var deployed_function = new HashMap<String,ArrayList<String>>();
+	var func_undeploy_counter = -1
+	var func_termination_counter = 0
 	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure","vm-cluster"));
 	Resource res = null
 
@@ -671,7 +673,13 @@ class FLYGenerator extends AbstractGenerator {
 	
 	
 		
-	def CharSequence compileJava(Resource resource) '''
+ 	def CharSequence compileJava(Resource resource){
+	var termination_init_counter = 0
+	var termination_counter = 0
+	func_termination_counter = 0
+	
+ 	var s = ""
+ 	s += '''
 	import java.io.File;
 	import java.io.FileInputStream;
 	import java.io.InputStreamReader;
@@ -800,7 +808,7 @@ class FLYGenerator extends AbstractGenerator {
 				«ENDIF»
 			«ENDFOR»
 			«FOR element : resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-				static boolean __wait_on_termination_«element.target.name» = true;
+				static boolean __wait_on_termination_«element.target.name»_«termination_init_counter++» = true;
 			«ENDFOR»
 			
 			public static void main(String[] args) throws Exception{
@@ -885,7 +893,7 @@ class FLYGenerator extends AbstractGenerator {
 					«ENDIF»
 				«ENDFOR»
 				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-						«generateTerminationQueue(element)»
+						«generateTerminationQueue(element, termination_counter++)»
 				«ENDFOR»
 				
 				«FOR element : resource.allContents.toIterable.filter(Expression)»
@@ -945,6 +953,8 @@ class FLYGenerator extends AbstractGenerator {
 		
 	}
 	'''
+	return s
+}
 		
 
 		
@@ -958,22 +968,23 @@ class FLYGenerator extends AbstractGenerator {
 				var cred = call.environment.name
 				switch env {
 					case "aws":{
+						func_undeploy_counter++
 						return '''
 							Runtime.getRuntime().exec("chmod +x src-gen/«call.target.name»_«call.environment.name»_undeploy.sh");
-							ProcessBuilder __processBuilder_undeploy_«call.target.name» = new ProcessBuilder("/bin/bash", "-c", "src-gen/«call.target.name»_«call.environment.name»_undeploy.sh «user» «call.target.name» "+__id_execution);
-							Map<String, String> __env_undeploy_«call.target.name» = __processBuilder_undeploy_«call.target.name».environment();
+							ProcessBuilder __processBuilder_undeploy_«call.target.name»_«func_undeploy_counter» = new ProcessBuilder("/bin/bash", "-c", "src-gen/«call.target.name»_«call.environment.name»_undeploy.sh «user» «call.target.name» "+__id_execution);
+							Map<String, String> __env_undeploy_«call.target.name»_«func_undeploy_counter» = __processBuilder_undeploy_«call.target.name»_«func_undeploy_counter».environment();
 							
-							__processBuilder_undeploy_«call.target.name».redirectOutput(ProcessBuilder.Redirect.INHERIT);
-							__processBuilder_undeploy_«call.target.name».redirectError(ProcessBuilder.Redirect.INHERIT);
-							String __path_env_undeploy_«call.target.name» = __env_undeploy_«call.target.name».get("PATH");
-							if (!__path_env_undeploy_«call.target.name».contains("/usr/local/bin")) {
-								 __env_undeploy_«call.target.name».put("PATH", __path_env_undeploy_«call.target.name»+":/usr/local/bin");
+							__processBuilder_undeploy_«call.target.name»_«func_undeploy_counter».redirectOutput(ProcessBuilder.Redirect.INHERIT);
+							__processBuilder_undeploy_«call.target.name»_«func_undeploy_counter».redirectError(ProcessBuilder.Redirect.INHERIT);
+							String __path_env_undeploy_«call.target.name»_«func_undeploy_counter» = __env_undeploy_«call.target.name»_«func_undeploy_counter».get("PATH");
+							if (!__path_env_undeploy_«call.target.name»_«func_undeploy_counter».contains("/usr/local/bin")) {
+								 __env_undeploy_«call.target.name»_«func_undeploy_counter».put("PATH", __path_env_undeploy_«call.target.name»_«func_undeploy_counter»+":/usr/local/bin");
 							}
-							Process __p_undeploy_«call.target.name»;
+							Process __p_undeploy_«call.target.name»_«func_undeploy_counter»;
 							try {
-								__p_undeploy_«call.target.name»= __processBuilder_undeploy_«call.target.name».start();
-								__p_undeploy_«call.target.name».waitFor();
-								if(__p_undeploy_«call.target.name».exitValue()!=0){
+								__p_undeploy_«call.target.name»_«func_undeploy_counter»= __processBuilder_undeploy_«call.target.name»_«func_undeploy_counter».start();
+								__p_undeploy_«call.target.name»_«func_undeploy_counter».waitFor();
+								if(__p_undeploy_«call.target.name»_«func_undeploy_counter».exitValue()!=0){
 									System.out.println("Error in «call.target.name»_«call.environment.name»_undeploy.sh ");
 									System.exit(1);
 								}
@@ -2084,7 +2095,7 @@ class FLYGenerator extends AbstractGenerator {
 			}	
 	}
 
-		def generateTerminationQueue(FlyFunctionCall element) {
+		def generateTerminationQueue(FlyFunctionCall element, int func_counter) {
 			var local_env = res.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
 			filter[(right as DeclarationObject).features.get(0).value_s.equals("smp")].get(0)
 			var local = local_env.name
@@ -2093,19 +2104,19 @@ class FLYGenerator extends AbstractGenerator {
 				case "aws":
 					return '''
 						__sqs_«element.environment.name».createQueue(new CreateQueueRequest("termination-«element.target.name»-"+__id_execution));
-						LinkedTransferQueue<String> __termination_«element.target.name»_ch  = new LinkedTransferQueue<String>();
-						final String __termination_«element.target.name»_url = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
+						LinkedTransferQueue<String> __termination_«element.target.name»_ch_«func_counter»  = new LinkedTransferQueue<String>();
+						final String __termination_«element.target.name»_url_«func_counter» = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
 						for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
 							__thread_pool_«local».submit(new Callable<Object>() {
 								@Override
 								public Object call() throws Exception {
-									while(__wait_on_termination_«element.target.name») {
-										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url).
+									while(__wait_on_termination_«element.target.name»_«func_counter») {
+										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url_«func_counter»).
 												withWaitTimeSeconds(1).withMaxNumberOfMessages(10);
 										ReceiveMessageResult __res = __sqs_«element.environment.name».receiveMessage(__recmsg);
 										for(Message msg : __res.getMessages()) { 
-											__termination_«element.target.name»_ch.put(msg.getBody());
-											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url, msg.getReceiptHandle());
+											__termination_«element.target.name»_ch_«func_counter».put(msg.getBody());
+											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url_«func_counter», msg.getReceiptHandle());
 										}
 									}
 									return null;
@@ -2117,18 +2128,18 @@ class FLYGenerator extends AbstractGenerator {
 					return '''
 						__sqs_«element.environment.name».createQueue(new CreateQueueRequest("termination-«element.target.name»-"+__id_execution));
 						LinkedTransferQueue<String> __termination_«element.target.name»_ch  = new LinkedTransferQueue<String>();
-						final String __termination_«element.target.name»_url = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
+						final String __termination_«element.target.name»_url_«func_counter» = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
 						for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
 							__thread_pool_«local».submit(new Callable<Object>() {
 								@Override
 								public Object call() throws Exception {
-									while(__wait_on_termination_«element.target.name») {
-										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url).
+									while(__wait_on_termination_«element.target.name»_«func_counter») {
+										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url_«func_counter»).
 												withWaitTimeSeconds(1).withMaxNumberOfMessages(10);
 										ReceiveMessageResult __res = __sqs_«element.environment.name».receiveMessage(__recmsg);
 										for(Message msg : __res.getMessages()) { 
-											__termination_«element.target.name»_ch.put(msg.getBody());
-											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url, msg.getReceiptHandle());
+											__termination_«element.target.name»_ch_«func_counter».put(msg.getBody());
+											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url_«func_counter», msg.getReceiptHandle());
 										}
 									}
 									return null;
@@ -2139,14 +2150,14 @@ class FLYGenerator extends AbstractGenerator {
 				case "azure":
 					return '''
 						«element.environment.name».createQueue("termination-«element.target.name»-"+__id_execution);
-						LinkedTransferQueue<String> __termination_«element.target.name»_ch  = new LinkedTransferQueue<String>();
+						LinkedTransferQueue<String> __termination_«element.target.name»_ch_«func_counter»  = new LinkedTransferQueue<String>();
 						__thread_pool_«local».submit(new Callable<Object>() {
 							@Override
 							public Object call() throws Exception {
-								while(__wait_on_termination_«element.target.name») {
+								while(__wait_on_termination_«element.target.name»_«func_counter») {
 									List<String> __recMsgs = «element.environment.name».peeksFromQueue("termination-«element.target.name»-"+__id_execution,10);
 									for(String msg : __recMsgs) { 
-										__termination_«element.target.name»_ch.put(msg);
+										__termination_«element.target.name»_ch_«func_counter».put(msg);
 									}
 								}
 								return null;
@@ -2278,10 +2289,8 @@ class FLYGenerator extends AbstractGenerator {
 					return '''(String) «generateArithmeticExpression(expression.target,scope)»'''
 				}
 				if (expression.type.equals("Integer")) {
-		
-					return '''(int)((«generateArithmeticExpression(expression.target,scope)» instanceof Short)? 
-					new Integer((Short) «generateArithmeticExpression(expression.target,scope)»):(«generateArithmeticExpression(expression.target,scope)» instanceof String)?
-					Integer.parseInt((String)«generateArithmeticExpression(expression.target,scope)») :(Integer) «generateArithmeticExpression(expression.target,scope)»)'''
+					
+					return '''Integer.parseInt((String)«generateArithmeticExpression(expression.target,scope)»)'''
 				}
 			
 				if (expression.type.equals("Double")) {
@@ -3434,7 +3443,6 @@ class FLYGenerator extends AbstractGenerator {
 
 	def generateAWSFlyFunctionCall(FlyFunctionCall call, String scope) {
 		// generate the aws lambda function
-		println("inside here")
 		println(call.input.f_index)
 		var async = call.isIsAsync
 		var cred = call.environment.name
@@ -3442,7 +3450,6 @@ class FLYGenerator extends AbstractGenerator {
 		var function = call.target.name
 		var ret = ''''''
 		if (call.input.isIs_for_index) {
-			println("inside here 2")
 			println(call.input.f_index)
 			
 			ret+='''
@@ -3631,24 +3638,24 @@ class FLYGenerator extends AbstractGenerator {
 							int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«cred»").get("nthread");
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
-							int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-								int __n_rows =  __rows/__num_proc_«call.target.name»_«func_ID»;
-								if(__rows%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows%__num_proc_«call.target.name»_«func_ID» ){
-									__n_rows++;
+								int __n_rows_«func_ID» =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
+								if(__rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» ){
+									__n_rows_«func_ID»++;
 								}
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"values\":[");
-								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows;__j++){
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"values\":[");
+								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows_«func_ID»;__j++){
 									for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
 									}
-									if(__j == __current_row_«(call.input.f_index as VariableLiteral).variable.name» + __n_rows-1) {
+									if(__j == __current_row_«(call.input.f_index as VariableLiteral).variable.name» + __n_rows_«func_ID»-1) {
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("]}");
 									}
 								}
-								__current_row_«(call.input.f_index as VariableLiteral).variable.name»+=__n_rows;
+								__current_row_«(call.input.f_index as VariableLiteral).variable.name»+=__n_rows_«func_ID»;
 							}
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 									final int __i_f = __i;
@@ -3736,10 +3743,10 @@ class FLYGenerator extends AbstractGenerator {
 			ret+='''
 				int __messagges_«call.target.name»_«func_ID» = 0;
 				while(__messagges_«call.target.name»_«func_ID»!=__num_proc_«call.target.name»_«func_ID») {
-					__termination_«call.target.name»_ch.poll();
+					__termination_«call.target.name»_ch_«func_termination_counter».poll();
 					__messagges_«call.target.name»_«func_ID»++;
 				}
-				__wait_on_termination_«call.target.name»=false;
+				__wait_on_termination_«call.target.name»_«func_termination_counter++»=false;
 			'''
 		}
 		// manage the callback
@@ -3930,10 +3937,10 @@ class FLYGenerator extends AbstractGenerator {
 							int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«cred»").get("nthread");
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
-							int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-								int __n_rows =  __rows/__num_proc_«call.target.name»_«func_ID»;
-								if(__rows%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows%__num_proc_«call.target.name»_«func_ID» ){
+								int __n_rows =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
+								if(__rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» ){
 									__n_rows++;
 								}
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
@@ -4029,10 +4036,10 @@ class FLYGenerator extends AbstractGenerator {
 			ret+='''
 				int __messagges_«call.target.name»_«func_ID» = 0;
 				while(__messagges_«call.target.name»_«func_ID»!=__num_proc_«call.target.name»_«func_ID») {
-					__termination_«call.target.name»_ch.poll();
+					__termination_«call.target.name»_ch_«func_termination_counter».poll();
 					__messagges_«call.target.name»_«func_ID»++;
 				}
-				__wait_on_termination_«call.target.name»=false;
+				__wait_on_termination_«call.target.name»_«func_termination_counter++»=false;
 			'''
 		}
 		// manage the callback
