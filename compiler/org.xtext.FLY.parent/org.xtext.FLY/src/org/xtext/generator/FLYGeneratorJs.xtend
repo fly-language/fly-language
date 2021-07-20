@@ -790,7 +790,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 		var i=0;
 		var lines = expression.code.split("\n");
 		var num_tabs = 0 
-		while(lines.get(1).charAt(i).equals(lines.get(1).charAt(0))){
+		while(lines.get(1).charAt(i).equals('\t')){
 			num_tabs++; 
 			i++;
 		}
