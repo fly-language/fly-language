@@ -253,6 +253,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 							__«(exp as VariableDeclaration).name»_rows = event.data[0].rows;
 							__«(exp as VariableDeclaration).name»_cols = event.data[0].cols;
 							__«(exp as VariableDeclaration).name»_submatrixIndex = event.data[0].submatrixIndex;
+							__«(exp as VariableDeclaration).name»_matrixType = event.data[0].matrixType;
 							__«(exp as VariableDeclaration).name»_values = event.data[0].values
 							__index = 0
 							«(exp as VariableDeclaration).name» = [];
@@ -282,7 +283,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 							var __«(exp as VariableDeclaration).name»_rows = arr_data[0];
 							var __«(exp as VariableDeclaration).name»_cols = arr_data[1];
 							var __«(exp as VariableDeclaration).name»_submatrixIndex = arr_data[2];
-							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[3]);
+							var __«(exp as VariableDeclaration).name»_matrixType = arr_data[3];
+							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[4]);
 							var arr_values = __«(exp as VariableDeclaration).name»_values.toArray();
 							var __index = 0
 							«(exp as VariableDeclaration).name» = [];
@@ -451,14 +453,33 @@ class FLYGeneratorJs extends AbstractGenerator {
 			«IF env.contains("aws")»
 				__data = await __sqs.getQueueUrl({ QueueName: "«exp.target.name»-'${id}'"}).promise();
 				
-				__params = {
-					MessageBody : JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»),
-					QueueUrl : __data.QueueUrl
-				};
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					__params = {
+						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
+												'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
+												'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
+												'submatrixIndex': __«generateJsArithmeticExpression(exp.expression,scope)»_submatrixIndex,
+												'matrixType': __«generateJsArithmeticExpression(exp.expression,scope)»_matrixType}),
+						QueueUrl : __data.QueueUrl
+					};
+				«ELSE»
+					__params = {
+						MessageBody : JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»),
+						QueueUrl : __data.QueueUrl
+					};
+				«ENDIF»
 				
 				__data = await __sqs.sendMessage(__params).promise();
 			«ELSEIF env == "azure"»
-				await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»));
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
+																	'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
+																	'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
+																	'submatrixIndex': __«generateJsArithmeticExpression(exp.expression,scope)»_submatrixIndex,
+																	'matrixType': __«generateJsArithmeticExpression(exp.expression,scope)»_matrixType});
+				«ELSE»
+					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»));
+				«ENDIF»
 			«ENDIF»
 			'''
 		} else if (exp instanceof VariableDeclaration) {

@@ -784,6 +784,9 @@ class FLYGenerator extends AbstractGenerator {
 	import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
 		«ENDIF»
 	import com.google.gson.Gson;
+	import com.google.gson.JsonArray;
+	import com.google.gson.JsonObject;
+	import com.google.gson.JsonParser;
 	import com.google.gson.reflect.TypeToken;
 		«IF checkAzure()»
 	import com.microsoft.azure.management.resources.fluentcore.arm.Region;
@@ -1645,6 +1648,49 @@ class FLYGenerator extends AbstractGenerator {
 							return '''
 								String «dec.name» = (String) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
 							'''
+						} else if ((dec.right as CastExpression).type.equals("Array")) {
+							
+						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
+								typeSystem.get(scope).put(dec.name,"Matrix_Object")
+								return '''
+									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
+									JsonObject jsonObject = new JsonParser().parse(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»).getAsJsonObject();
+									
+									int n_rows = jsonObject.get("rows").getAsInt();
+									int n_cols = jsonObject.get("cols").getAsInt();
+									int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+									String matrixType = jsonObject.get("matrixType").getAsString();
+											        
+									//convert matrix json string to matrix in java
+									String valuesJson = jsonObject.getAsJsonArray("values").toString();
+									String extractedItems = valuesJson.replaceAll("\\[", "").replaceAll("\\]", "").replaceAll("\\s", "");
+									String[] items = extractedItems.split(",");	  
+																				
+									Object [][] «dec.name» = new Object[n_rows][n_cols];
+									if(matrixType.equals("Double")){
+										int itemCount = 0;
+										for (int j=0; j < n_rows; j++) {
+											for(int k=0; k< n_cols; k++) {
+												«dec.name»[j][k] = Double.parseDouble(items[itemCount++]);
+											}
+										}
+									}else if (matrixType.equals("Integer")){
+										int itemCount = 0;
+										for (int j=0; j < n_rows; j++) {
+											for(int k=0; k< n_cols; k++) {
+												«dec.name»[j][k] = Integer.parseInt(items[itemCount++]);
+											}
+										}
+									}else {
+										//it is a string
+										int itemCount = 0;
+										for (int j=0; j < n_rows; j++) {
+											for(int k=0; k< n_cols; k++) {
+												x[j][k] = items[itemCount++];
+											}
+										}
+									}
+								'''
 						} else if ((dec.right as CastExpression).type.equals("ArrayList")) {
 							typeSystem.get(scope).put(dec.name, "ArrayList")
 							return '''
@@ -3639,13 +3685,16 @@ class FLYGenerator extends AbstractGenerator {
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
 							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+							String matrixType = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
+							matrixType = matrixType.substring(0, matrixType.indexOf("["));
+										
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 								int __n_rows_«func_ID» =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
 								if(__rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» ){
 									__n_rows_«func_ID»++;
 								}
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"values\":[");
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType+"\",\"values\":[");
 								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows_«func_ID»;__j++){
 									for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
@@ -3682,6 +3731,8 @@ class FLYGenerator extends AbstractGenerator {
 								int __current_col_«(call.input.f_index as VariableLiteral).variable.name» = 0;
 								int __cols = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
 								int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+								String matrixType = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
+								matrixType = matrixType.substring(0, matrixType.indexOf("["));
 								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 									int __n_cols =  __cols/__num_proc_«call.target.name»_«func_ID»;
@@ -3689,7 +3740,7 @@ class FLYGenerator extends AbstractGenerator {
 										__n_cols++;
 									}
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"values\":[");
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType+"\",\"values\":[");
 									for(int __j = 0; __j<__rows;__j++){
 										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»+__n_cols;__z++){
 											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
@@ -4297,7 +4348,7 @@ class FLYGenerator extends AbstractGenerator {
 			if (assignment.value instanceof CastExpression &&
 				((assignment.value as CastExpression).target instanceof ChannelReceive)) {
 				if (!(((assignment.value as CastExpression).target as ChannelReceive).target.environment.
-					get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")) { // aws environment
+					get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")) { // cloud environment
 					if ((assignment.value as CastExpression).type.equals("Integer")) {
 						return '''
 							«generateArithmeticExpression(assignment.feature,scope)» «assignment.op» Integer.parseInt(«((assignment.value as CastExpression).target as ChannelReceive).target.name».take().toString());
