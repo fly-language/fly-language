@@ -2353,6 +2353,9 @@ class FLYGenerator extends AbstractGenerator {
 				if (expression.type.equals("Object")) {
 					return '''((HashMap<Object,Object>) «generateArithmeticExpression(expression.target,scope)»)'''
 				}
+				if (expression.type.equals("Matrix")) {
+					return '''«generateArithmeticExpression(expression.target,scope)»'''
+				}
 			} else { // parsing
 				if (expression.type.equals("Integer")) {
 					return '''Integer.parseInt( «generateArithmeticExpression(expression.target,scope)».toString())'''
@@ -4121,6 +4124,7 @@ class FLYGenerator extends AbstractGenerator {
 	def generateChannelSend(ChannelSend send, String scope) {
 		var env = (((send.target.environment.get(0).right as DeclarationObject).features.get(0)) as DeclarationFeature).value_s
 		var env_name = send.target.environment.get(0).name
+		println("test channel send " + send.expression)
 		switch env {
 			case "smp":
 				return '''«(send.target as VariableDeclaration).name».add(«generateArithmeticExpression(send.expression,scope)»)'''

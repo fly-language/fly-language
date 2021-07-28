@@ -252,8 +252,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 							__«(exp as VariableDeclaration).name»_matrix = event.data[0]
 							__«(exp as VariableDeclaration).name»_rows = event.data[0].rows;
 							__«(exp as VariableDeclaration).name»_cols = event.data[0].cols;
-							__«(exp as VariableDeclaration).name»_submatrixIndex = event.data[0].submatrixIndex;
-							__«(exp as VariableDeclaration).name»_matrixType = event.data[0].matrixType;
+							submatrixIndex = event.data[0].submatrixIndex;
+							matrixType = event.data[0].matrixType;
 							__«(exp as VariableDeclaration).name»_values = event.data[0].values
 							__index = 0
 							«(exp as VariableDeclaration).name» = [];
@@ -282,8 +282,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 
 							var __«(exp as VariableDeclaration).name»_rows = arr_data[0];
 							var __«(exp as VariableDeclaration).name»_cols = arr_data[1];
-							var __«(exp as VariableDeclaration).name»_submatrixIndex = arr_data[2];
-							var __«(exp as VariableDeclaration).name»_matrixType = arr_data[3];
+							var submatrixIndex = arr_data[2];
+							var matrixType = arr_data[3];
 							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[4]);
 							var arr_values = __«(exp as VariableDeclaration).name»_values.toArray();
 							var __index = 0
@@ -458,8 +458,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
 												'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
 												'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
-												'submatrixIndex': __«generateJsArithmeticExpression(exp.expression,scope)»_submatrixIndex,
-												'matrixType': __«generateJsArithmeticExpression(exp.expression,scope)»_matrixType}),
+												'submatrixIndex': submatrixIndex,
+												'matrixType': matrixType}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSE»
@@ -475,8 +475,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
 																	'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
 																	'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
-																	'submatrixIndex': __«generateJsArithmeticExpression(exp.expression,scope)»_submatrixIndex,
-																	'matrixType': __«generateJsArithmeticExpression(exp.expression,scope)»_matrixType});
+																	'submatrixIndex': submatrixIndex,
+																	'matrixType': matrixType});
 				«ELSE»
 					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»));
 				«ENDIF»
@@ -886,18 +886,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 						«(assignment.feature_obj as IndexObject).name.name»[«generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(0).value,scope)»] = «generateJsArithmeticExpression(assignment.value,scope)»
 					'''
 				} else if(typeSystem.get(scope).get((assignment.feature_obj as IndexObject).name.name).contains("Matrix")){
-					if((assignment.feature_obj as IndexObject).indexes.length==2){
-						var i = generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(0).value,scope)
-						var j = generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(1).value,scope)
-						var col = typeSystem.get(scope).get((assignment.feature_obj as IndexObject).name.name).split("_").get(2)
-						return '''
-							«(assignment.feature_obj as IndexObject).name.name»[(«i»*«col»)+«j»] = «generateJsArithmeticExpression(assignment.value,scope)»
-						'''
-					}else {
-						return '''
-							«(assignment.feature_obj as IndexObject).name.name»[«generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(0).value,scope)»,«generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(1).value,scope)»,«generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(2).value,scope)»] = «generateJsArithmeticExpression(assignment.value,scope)»
-						'''
-					}
+					return '''«generateJsArithmeticExpression(assignment.feature_obj,scope)» =  «generateJsArithmeticExpression(assignment.value,scope)»'''
 				}else{
 					typeSystem.get(scope).put(
 						((assignment.feature_obj as IndexObject).name as VariableDeclaration).name + "[" +
