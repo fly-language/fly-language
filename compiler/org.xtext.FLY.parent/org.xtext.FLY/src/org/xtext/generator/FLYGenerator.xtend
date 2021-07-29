@@ -719,6 +719,18 @@ class FLYGenerator extends AbstractGenerator {
 	import org.apache.commons.io.FileUtils;
 	import org.apache.commons.io.FileUtils;
 	import java.sql.*;
+	import com.mongodb.MongoClient;
+	import com.mongodb.MongoClientURI;
+	import com.mongodb.client.MongoCollection;
+	import com.mongodb.client.MongoCursor;
+	import org.bson.*;
+	import java.io.FileReader;
+	import com.opencsv.CSVReader;
+	import java.util.Properties;
+	import org.apache.log4j.PropertyConfigurator;
+	import java.util.Iterator;
+	import tech.tablesaw.api.StringColumn;
+	import tech.tablesaw.api.IntColumn;
 		«IF checkAWS() || checkAWSDebug()»
 	import com.amazonaws.AmazonClientException;
 	import com.amazonaws.auth.AWSStaticCredentialsProvider;
@@ -911,6 +923,187 @@ class FLYGenerator extends AbstractGenerator {
 				«ENDIF»	
 			«ENDFOR»	
 
+			private static List <Table> __generateTableFromNoSQLQuery(MongoCursor <Document> ___mongoCursor) {
+					List <Table> ___resultGenerateTableFromNoSQLQuery = new ArrayList <> ();
+							
+				if(!___mongoCursor.hasNext()) 
+					return ___resultGenerateTableFromNoSQLQuery;
+										
+				org.json.JSONObject ___jsonObject;
+				ArrayList <ArrayList <String>> ___listFeatures = new ArrayList <> ();
+				ArrayList <org.json.JSONArray> ___listObjects = new ArrayList <> ();
+														
+				while(___mongoCursor.hasNext()) {
+					___jsonObject = new org.json.JSONObject(___mongoCursor.next().toJson());
+					Iterator <String> ___iteratorJsonObjectKeys = ___jsonObject.keys();
+					ArrayList <String> ___listFeaturesCurrent = new ArrayList <String> ();
+					
+					while(___iteratorJsonObjectKeys.hasNext())
+						___listFeaturesCurrent.add(___iteratorJsonObjectKeys.next());
+					
+					int ___i = 0;
+					for(; ___i < ___listFeatures.size(); ++___i)
+						if(___listFeatures.get(___i).equals(___listFeaturesCurrent))
+							break;
+					
+					if(___i >= ___listFeatures.size()) {
+						___listFeatures.add(___listFeaturesCurrent);
+						org.json.JSONArray ___listObjectForThisFeatures = new org.json.JSONArray();
+						___listObjectForThisFeatures.put(___jsonObject);
+						___listObjects.add(___listObjectForThisFeatures);
+					} else
+						___listObjects.get(___i).put(___jsonObject);
+				}
+				
+				for(int ___i = 0; ___i < ___listFeatures.size(); ++___i) {
+					Table ___table = Table.create();
+					ArrayList <String> ___features = ___listFeatures.get(___i);
+					org.json.JSONArray ___objects = ___listObjects.get(___i);
+					
+					for(Column <?> ___column : ___generateColumns("", ___features, ___objects))
+						___table.addColumns(___column);
+					
+					___resultGenerateTableFromNoSQLQuery.add(___table);
+				}			
+				return 	___resultGenerateTableFromNoSQLQuery;		
+				
+			}
+			
+			private static List <Column <?>> ___generateColumns(
+					String ___nameColumn, List <String> ___features, org.json.JSONArray ___objects) {
+				List <Column <?>> ___columns = new ArrayList <> ();
+				int ___j = 0;
+				
+				for(String ___feature : ___features) {				
+					org.json.JSONObject ___object = ___objects.getJSONObject(0);
+					Object ___value = ___object.get(___feature);
+					
+					if(___value instanceof org.json.JSONObject) {
+						___columns.add(StringColumn.create(___feature, ((org.json.JSONObject) ___value).toString()));
+						
+						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+							___object = ___objects.getJSONObject(___i);
+							___value = ___object.get(___feature);
+					
+							((StringColumn) ___columns.get(___j)).append(((org.json.JSONObject) ___value).toString());
+						}
+						++___j;
+											
+					} else if(___value instanceof org.json.JSONArray) {
+						___columns.add(StringColumn.create(___feature, ((org.json.JSONArray) ___value).toString()));
+						
+						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+							___object = ___objects.getJSONObject(___i);
+							___value = ___object.get(___feature);
+						
+							((StringColumn) ___columns.get(___j)).append(((org.json.JSONArray) ___value).toString());
+						}
+						++___j;
+						
+					} else {
+					
+						if(___value instanceof Integer) {
+							IntColumn ___columnToAdd = IntColumn.create(___nameColumn + ___feature);
+							___columnToAdd.append((Integer) ___value);
+							___columns.add(___columnToAdd);
+						} else				
+							___columns.add(StringColumn.create(___nameColumn +___feature, "" + ___value));
+						
+						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+							___object = ___objects.getJSONObject(___i);
+							___value = ___object.get(___feature);
+							
+							if(___value instanceof Integer)
+								((IntColumn) ___columns.get(___j)).append((Integer) ___value);
+							else
+								((StringColumn) ___columns.get(___j)).append("" + ___value);					
+						}
+						++___j;
+								
+					}								
+				}			
+				return ___columns;
+					
+			}
+			
+			@SuppressWarnings("unchecked")
+			private static Object __executeDistributedQuery(char typeQuery, Object query, ArrayList <MongoCollection <Document>> sourceList) {
+				switch(typeQuery) {			
+					case 'S':
+						List <Table> __table = new ArrayList <> ();
+						for(MongoCollection <Document> source: sourceList) {
+							List <Table> __tmp = __generateTableFromNoSQLQuery(source.find((BsonDocument) query).cursor());
+							if(__table.size() == 0)
+								__table = __tmp;
+							else {
+								for(int i = 0; i < __table.size(); i++) {
+									boolean flag = false;
+								
+									for(int j = 0; j < __tmp.size(); j++) {										
+										if(__table.get(i).columnCount() == __tmp.get(j).columnCount()) {
+											// Se le colonne hanno lo stesso numero
+											Iterator <String> iterator = __table.get(i).columnNames().iterator();
+											Iterator <String> iteratorTmp = __tmp.get(j).columnNames().iterator();
+											
+											// Controllo se effettivamente le colonne sono uguali
+											int countIterator = 0;
+											int countColumns = __table.get(i).columnCount();
+											
+											while(iterator.hasNext()) {											
+												if(iterator.next().equals(iteratorTmp.next()))
+														countIterator++;
+												else break;											
+											}
+											
+											// Controllo sui contatori
+											if(countIterator == countColumns) { // Se sono uguali, le colonne sono uguali
+												__table.get(i).append(__tmp.get(j));
+												__tmp.remove(j); // Rimuovo la tabella appena aggiunta+
+												flag = true;
+												break;
+											} else { // Se non sono uguali, le colonne sono diverse, allora continuiamo
+												continue;
+											}																				
+										}																	
+									}
+									
+									if(flag) // Se sono uscito dal for precedente per un interruzione, vuol dire che una tabella presenta nella lista di ritorno è stata incrementata
+										continue;								
+								}
+								
+							__table.addAll(__tmp); // Tutte le tabelle che non possono essere incrementate, vengono aggiunte come nuove tabelle
+							
+							}
+						}
+						return __table;
+					
+					case 'D':
+						long countDelete = 0;
+						for(MongoCollection <Document> source: sourceList)
+							countDelete += source.deleteMany((BsonDocument) query).getDeletedCount();
+						return countDelete;
+					
+					case 'I':
+						for(MongoCollection <Document> source: sourceList)
+							source.insertMany((List <Document>) query);
+						return null;
+							
+					case 'U':
+						for(MongoCollection <Document> source: sourceList)
+							source.updateMany(((ArrayList<BsonDocument>) query).get(0), ((ArrayList<BsonDocument>) query).get(1));
+						return null;
+					
+					case 'R':
+						for(MongoCollection <Document> source: sourceList)
+							source.replaceOne(((ArrayList<BsonDocument>) query).get(0), Document.parse((((ArrayList<BsonDocument>) query).get(1).toJson())));
+						return null;
+					
+					default: 
+						return null;
+				}
+				
+			}
+
 			private static String __generateString(Table t,int id) {
 				StringBuilder b = new StringBuilder();
 				b.append("{\"id\":\""+id+"\",\"data\":");
@@ -946,10 +1139,6 @@ class FLYGenerator extends AbstractGenerator {
 	}
 	'''
 		
-
-		
-
-		
 		def undeployFlyFunctionOnCloud(FlyFunctionCall call) {
 			var env = (call.environment.right as DeclarationObject).features.get(0).value_s
 			if(deployed_function.get(env).contains(call.target.name)){
@@ -957,7 +1146,7 @@ class FLYGenerator extends AbstractGenerator {
 				var user = (call.environment.right as DeclarationObject).features.get(1).value_s
 				var cred = call.environment.name
 				switch env {
-					case "aws":{
+					case "aws": {
 						return '''
 							Runtime.getRuntime().exec("chmod +x src-gen/«call.target.name»_«call.environment.name»_undeploy.sh");
 							ProcessBuilder __processBuilder_undeploy_«call.target.name» = new ProcessBuilder("/bin/bash", "-c", "src-gen/«call.target.name»_«call.environment.name»_undeploy.sh «user» «call.target.name» "+__id_execution);
@@ -982,7 +1171,7 @@ class FLYGenerator extends AbstractGenerator {
 							}	
 							'''			
 					} 
-					case "aws-debug":{
+					case "aws-debug": {
 						return '''
 							Runtime.getRuntime().exec("chmod +x src-gen/«call.target.name»_«call.environment.name»_undeploy.sh");
 							ProcessBuilder __processBuilder_undeploy_«call.target.name» = new ProcessBuilder("/bin/bash", "-c", "src-gen/«call.target.name»_«call.environment.name»_undeploy.sh «user» «call.target.name» "+__id_execution);
@@ -1015,7 +1204,7 @@ class FLYGenerator extends AbstractGenerator {
 				}
 
 					
-			}else
+			} else
 				return ''''''
 		}
 		
@@ -1026,7 +1215,7 @@ class FLYGenerator extends AbstractGenerator {
 			if (!deployed_function.get(environment).contains(call.target.name)){
 				deployed_function.get(environment).add(call.target.name)
 				
-				if(environment.contains("aws")){
+				if(environment.contains("aws")) {
 					var user = (call.environment.right as DeclarationObject).features.get(1).value_s
 					var cred = call.environment.name
 					return '''
@@ -1058,7 +1247,7 @@ class FLYGenerator extends AbstractGenerator {
 						}));
 						
 						'''	
-				}else if((call.environment.right as DeclarationObject).features.get(0).value_s.equals("azure")) {
+				} else if((call.environment.right as DeclarationObject).features.get(0).value_s.equals("azure")) {
 					return '''
 						__termination_deploy_on_cloud.add(__thread_pool_deploy_on_cloud.submit( new Callable<Object> (){
 							@Override
@@ -1249,7 +1438,7 @@ class FLYGenerator extends AbstractGenerator {
 								.build();
 						'''
 					}
-					case "azure":{
+					case "azure": {
 						var client_id = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
 						var tenant_id = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
 						var secret_key = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s
@@ -1260,12 +1449,12 @@ class FLYGenerator extends AbstractGenerator {
 						static AzureClient «dec.name» = null;
 						'''
 					}
-					case "random":{
+					case "random": {
 						return '''
 							Random «dec.name» = new Random();
 							'''
 					}
-					case "channel":{
+					case "channel": {
 						var env = (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s
 						return '''
 							static LinkedTransferQueue<Object> «dec.name» = new LinkedTransferQueue<Object>();
@@ -1304,7 +1493,7 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						
 					}
-					case "dataframe":{
+					case "dataframe": {
 						var table_name = (dec.right as DeclarationObject).features.get(1).value_s
 						var source = (dec.right as DeclarationObject).features.get(2)
 						var separator = "";
@@ -1335,16 +1524,16 @@ class FLYGenerator extends AbstractGenerator {
 							).executeQuery());
 							«ENDIF»
 							'''
-						}else{
+						} else {
 							var region = "";
 							var uri = "";
-							if (dec.onCloud && ! (source.value_s.contains("https://"))){
+							if (dec.onCloud && ! (source.value_s.contains("https://"))) {
 								region = (dec.environment.get(0).right as DeclarationObject).features.get(4).value_s
-								if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("aws")){
+								if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("aws")) {
 									uri = '''"https://«name»"+__id_execution+".s3.«region».amazonaws.com/bucket-"+__id_execution+"/«source.value_s»"'''
-								} else if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("azure")){
+								} else if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("azure")) {
 									uri = '''"https://flysa"+__id_execution+".blob.core.windows.net/bucket-"+__id_execution+"/«source.value_s»"'''
-								} else if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("aws-debug")){
+								} else if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("aws-debug")) {
 									uri = '''"https://«name»"+__id_execution+".s3.«region».amazonaws.com/bucket-"+__id_execution+"/«source.value_s»"'''
 								} 
 							} else{
@@ -1363,8 +1552,8 @@ class FLYGenerator extends AbstractGenerator {
 							'''
 						}
 					}
-					case "sql":{
-						if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("aws")){
+					case "sql": {
+						if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("aws")) {
 							var instance = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
 							var db_name = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
 							var user_name = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s
@@ -1381,7 +1570,7 @@ class FLYGenerator extends AbstractGenerator {
 								Class.forName("com.mysql.jdbc.Driver").newInstance();
 								Connection «dec.name» = DriverManager.getConnection("jdbc:mysql://" + __endpoint_«dec.name».getAddress() + "/«db_name»?user=«user_name»&password=«password»");
 							'''	 					
-						}else if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure")){
+						} else if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure")) {
 							var resource_group = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
 							var instance = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
 							var db_name = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s
@@ -1407,29 +1596,315 @@ class FLYGenerator extends AbstractGenerator {
 							Connection «dec.name» = DriverManager.getConnection("jdbc:mysql://«endpoint»/«db_name»?user=«user_name»&password=«password»");
 							'''	 
 						}
-						
+					}
+					case "nosql":{
+						if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure")) {
+							var resourceGroup = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
+							var instance = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
+							var database = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s
+							var collection = ((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s
+							return '''
+							MongoClient «dec.name»Client = new MongoClient(new MongoClientURI(«dec.environment.get(0).name».getDBEndpointNoSQL("«resourceGroup»", "«instance»")));
+							MongoCollection <Document> «dec.name» = «dec.name»Client.getDatabase("«database»").getCollection("«collection»");
+							'''
+						} else {
+							var database = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
+							var collection = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s								
+							if((dec.right as DeclarationObject).features.size() < 5) {
+								return '''
+								if(!(new File("log4j.properties").exists())) {
+									try {
+										Properties props = new Properties();
+										props.put("log4j.rootLogger", "INFO, stdout");
+										props.put("log4j.appender.stdout", "org.apache.log4j.ConsoleAppender");
+										props.put("log4j.appender.stdout.Target", "System.out");
+										props.put("log4j.appender.stdout.layout", "org.apache.log4j.PatternLayout");
+										props.put("log4j.appender.stdout.layout.ConversionPattern", "%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n");
+										FileOutputStream outputStream = new FileOutputStream("log4j.properties");
+										props.store(outputStream, "This is a default properties file");
+										System.out.println("Default properties file created.");
+									} catch (IOException e) {
+										System.out.println("Default properties file not created.");
+										e.printStackTrace();
+									}
+								}
+													
+								PropertyConfigurator.configure("log4j.properties");
+														
+								MongoClient «dec.name»Client = new MongoClient(new MongoClientURI(«IF 
+								((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s.nullOrEmpty
+								»«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_f.name
+								»«ELSE
+								»"«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»"«ENDIF»));
+								MongoCollection <Document> «dec.name» = «dec.name»Client.getDatabase("«database»").getCollection("«collection»");
+								'''
+							} else {
+								return '''
+								PropertyConfigurator.configure(«IF 
+								((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s.nullOrEmpty
+								»«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_f.name
+								»«ELSE
+								»"«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»"«ENDIF»);
+													
+								MongoClient «dec.name»Client = new MongoClient(new MongoClientURI(«IF 
+								((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s.nullOrEmpty
+								»«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_f.name
+								»«ELSE
+								»"«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»"«ENDIF»));
+								MongoCollection <Document> «dec.name» = «dec.name»Client.getDatabase("«database»").getCollection("«collection»");
+								'''
+							}
+						}
 					}
 					case "query":{
 						var query_type = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
-						if (query_type.equals("update")){
-							typeSystem.get(scope).put(dec.name, "int")
-						}else if (query_type.equals("value")){
-							typeSystem.get(scope).put(dec.name, "Table")
-						} else {
-							typeSystem.get(scope).put(dec.name, "Table")
-						}
+						var connectionVar = (((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration).right as DeclarationObject
+						var typeDatabase = (connectionVar.features.get(0) as DeclarationFeature).value_s
 						var connection = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name
-						return '''
-						PreparedStatement «dec.name» = «connection».prepareStatement(
-						«IF 
+						if(typeDatabase.equals("sql")) {
+							if(query_type.equals("update")){
+								typeSystem.get(scope).put(dec.name, "int")
+							} else if(query_type.equals("value")){
+								typeSystem.get(scope).put(dec.name, "Table")
+							} else {
+								typeSystem.get(scope).put(dec.name, "Table")
+							}
+							return '''
+							PreparedStatement «dec.name» = «connection».prepareStatement(
+							«IF 
 							((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
-						»
-						«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
-						« ELSE » 
+							»
+							«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
+							« ELSE » 
 							"«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»"
-						«ENDIF»
-						);
-						'''	 
+							«ENDIF»
+							);
+							'''
+						} else if(typeDatabase.equals("nosql")) {
+							if(query_type.equals("select")){
+								typeSystem.get(scope).put(dec.name, "List <Table>")
+							} else if(query_type.equals("delete")){
+								typeSystem.get(scope).put(dec.name, "long")
+							}
+							if(query_type.equals("insert")) {
+								if(((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty) {
+									if((((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f as VariableDeclaration).right instanceof DeclarationObject) {
+										var variables = (((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f as VariableDeclaration).right as DeclarationObject
+										if(variables.features.get(0).value_s.equals("file")) {
+											if((dec.right as DeclarationObject).features.size() == 6) {
+												var from = ((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s
+												var to = ((dec.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s
+												return '''
+												List <Document> «dec.name» = new ArrayList <Document> ();
+												try (CSVReader ___CSVReader = new CSVReader(new FileReader(
+														«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»))) {
+													List <String[]> ___listOfArrayString = ___CSVReader.readAll();
+													String[] ___nosqlfeatures = ___listOfArrayString.get(0);
+													for(int ___indexOfReadingFromCSV = «from» + 1; ___indexOfReadingFromCSV < «to» + 1; ++___indexOfReadingFromCSV) {
+														Document ___dcmnt_tmp = new Document();
+														for(int ___indexOfReadingFromCSV2 = 0; ___indexOfReadingFromCSV2 < ___nosqlfeatures.length; ___indexOfReadingFromCSV2++) 
+															___dcmnt_tmp.append(___nosqlfeatures[___indexOfReadingFromCSV2], 
+																___listOfArrayString.get(___indexOfReadingFromCSV)[___indexOfReadingFromCSV2]); 
+														«dec.name».add(___dcmnt_tmp);
+													}
+												}
+												'''
+											} else {
+												return '''
+												List <Document> «dec.name» = new ArrayList <Document> ();
+												try (CSVReader ___CSVReader = new CSVReader(new FileReader(
+														«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»))) {
+													List <String[]> ___listOfArrayString = ___CSVReader.readAll();
+													String[] ___nosqlfeatures = ___listOfArrayString.get(0);
+													for(int ___indexOfReadingFromCSV = 1; ___indexOfReadingFromCSV < ___listOfArrayString.size(); ++___indexOfReadingFromCSV) {
+														Document ___dcmnt_tmp = new Document();
+														for(int ___indexOfReadingFromCSV2 = 0; ___indexOfReadingFromCSV2 < ___nosqlfeatures.length; ___indexOfReadingFromCSV2++) 
+															___dcmnt_tmp.append(___nosqlfeatures[___indexOfReadingFromCSV2], 
+																___listOfArrayString.get(___indexOfReadingFromCSV)[___indexOfReadingFromCSV2]); 
+														«dec.name».add(___dcmnt_tmp);
+													}
+												}
+												'''
+											}
+										} 
+									} else {
+										return '''
+										String ___«dec.name»Statement = «((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»;
+										if(___«dec.name»Statement.charAt(0) != '[')
+											___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
+										
+										org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
+										List <Document> «dec.name» = new ArrayList <Document> ();
+										
+										for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
+											«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
+										'''
+									}
+								} else {
+									return '''
+									String ___«dec.name»Statement = "«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»";
+									if(___«dec.name»Statement.charAt(0) != '[')
+										___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
+										
+									org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
+									List <Document> «dec.name» = new ArrayList <Document> ();
+										
+									for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
+										«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
+									'''
+								}
+							} else if(query_type.equals("update") || query_type.equals("replace")) { 
+								if((dec.right as DeclarationObject).features.size() == 5)
+									return '''
+									BsonDocument «dec.name»_filter = Document.parse(«IF 
+									((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
+									»
+									«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
+									« ELSE » 
+									"«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+																				
+									BsonDocument «dec.name» = Document.parse(«IF 
+									((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s.nullOrEmpty
+									»
+									«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_f.name»
+									« ELSE » 
+									"«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+									'''	
+							} else {
+								return '''
+								BsonDocument «dec.name» = Document.parse(«IF 
+								((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
+								»
+								«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
+								« ELSE » 
+								"«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+								'''
+							}
+						}
+					}
+					case "distributed-query": {
+						var query_type = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
+						if(query_type.equals("select")) {
+							typeSystem.get(scope).put(dec.name, "List <Table>")
+						} else if(query_type.equals("delete")) {
+							typeSystem.get(scope).put(dec.name, "long")
+						}
+						if(query_type.equals("select") || query_type.equals("delete")) {
+							var ret = ''''''
+							ret += '''
+							BsonDocument «dec.name» = Document.parse(«IF 
+								((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.nullOrEmpty
+							»
+							«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»
+							« ELSE » 
+								"«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+												
+							ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+							'''
+							for(i : 3 ..< (dec.right as DeclarationObject).features.size)					
+								ret += '''
+								«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+								'''
+							return ret;
+						} else if(query_type.equals("insert")) {
+							var ret = ''''''
+							if(((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.nullOrEmpty) {
+								if((((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration).right instanceof DeclarationObject) {
+									var variables = (((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration).right as DeclarationObject
+									if(variables.features.get(0).value_s.equals("file")) {
+										ret += '''
+										List <Document> «dec.name» = new ArrayList <Document> ();
+										try (CSVReader ___CSVReader = new CSVReader(new FileReader(
+												«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»))) {
+											List <String[]> ___listOfArrayString = ___CSVReader.readAll();
+											String[] ___nosqlfeatures = ___listOfArrayString.get(0);
+											for(int ___indexOfReadingFromCSV = 1; ___indexOfReadingFromCSV < ___listOfArrayString.size(); ++___indexOfReadingFromCSV) {
+												Document ___dcmnt_tmp = new Document();
+												for(int ___indexOfReadingFromCSV2 = 0; ___indexOfReadingFromCSV2 < ___nosqlfeatures.length; ___indexOfReadingFromCSV2++) 
+													___dcmnt_tmp.append(___nosqlfeatures[___indexOfReadingFromCSV2], 
+															___listOfArrayString.get(___indexOfReadingFromCSV)[___indexOfReadingFromCSV2]); 
+												«dec.name».add(___dcmnt_tmp);
+											}
+										}
+															
+										ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+										'''
+															
+										for(i : 3 ..< (dec.right as DeclarationObject).features.size)					
+											ret += '''
+											«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+											'''
+										return ret;
+									}
+								} else {
+									ret += '''
+									String ___«dec.name»Statement = «((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»;
+									if(___«dec.name»Statement.charAt(0) != '[')
+										___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
+
+									org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
+									List <Document> «dec.name» = new ArrayList <Document> ();
+
+									for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
+										«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
+															
+									ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+									'''
+														
+									for(i : 3 ..< (dec.right as DeclarationObject).features.size)					
+										ret += '''
+										«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+										'''
+									return ret;
+								}
+							} else {
+								ret += '''
+								String ___«dec.name»Statement = "«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»";
+								if(___«dec.name»Statement.charAt(0) != '[')
+									___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
+														org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
+								List <Document> «dec.name» = new ArrayList <Document> ();
+
+								for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
+									«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
+														
+								ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+								'''
+																						
+								for(i : 3 ..< (dec.right as DeclarationObject).features.size)					
+									ret += '''
+									«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+									'''
+								return ret;
+							}
+						} else {
+							var ret = ''''''
+							ret += '''
+							BsonDocument «dec.name»_filter = Document.parse(«IF 
+								((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.nullOrEmpty
+							»
+							«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»
+							« ELSE » 
+								"«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+												
+							BsonDocument «dec.name» = Document.parse(«IF 
+								((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
+							»
+							«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
+							« ELSE » 
+								"«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+							ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+							ArrayList <BsonDocument> «dec.name»Pair = new ArrayList <> ();
+							«dec.name»Pair.add(«dec.name»_filter);
+							«dec.name»Pair.add(«dec.name»);
+							'''
+																													
+							for(i : 4 ..< (dec.right as DeclarationObject).features.size)					
+								ret += '''
+								«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+								'''
+							return ret;	
+						}
 					}
 					default: {
 						return ''''''
@@ -1745,7 +2220,7 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						ret+='''};'''
 						return ret
-					}else if (((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) instanceof ArrayValue){ //matrix 3d
+					} else if (((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) instanceof ArrayValue){ //matrix 3d
 						if ((((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) as ArrayValue).values.get(0) instanceof NumberLiteral ||
 							(((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) as ArrayValue).values.get(0) instanceof StringLiteral ||
 							(((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) as ArrayValue).values.get(0) instanceof FloatLiteral ){
@@ -1866,7 +2341,7 @@ class FLYGenerator extends AbstractGenerator {
 					return ''''''
 				
 				}
-		}else{
+		} else{
 			var path = (dec.right as DeclarationObject).features.get(1).value_s
 			if( !(path.contains("https://") || path.contains("http://")) ){ // local 
 				var name_file_ext = path.split("/").last
@@ -2365,7 +2840,7 @@ class FLYGenerator extends AbstractGenerator {
 				}
 				s += ");
 						}"
-			}else{
+			} else {
 				var func_name = ((res.allContents.toIterable.filter(VariableDeclaration).filter[it.name==expression.target.name].get(0) as VariableDeclaration).right as FlyFunctionCall).target.name
 				if(expression.feature.equals("wait")){
 					s+='''
@@ -2402,19 +2877,68 @@ class FLYGenerator extends AbstractGenerator {
 				case "query":{
 					if(expression.feature.equals("execute")){
 						var queryType = (expression.target.right as DeclarationObject).features.get(1).value_s
-						if (queryType.equals("update")){
-							return '''«(expression.target as VariableDeclaration).name».executeUpdate();'''
-						}else if (queryType.equals("value")){
-							return '''Table.read().db(
+						var connection = (((expression.target.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration)
+						var databaseType = (connection.right as DeclarationObject).features.get(0).value_s
+						if(databaseType.equals("sql")) {
+							if(queryType.equals("update")) {
+								return '''
+								«(expression.target as VariableDeclaration).name».executeUpdate();'''
+							} else if(queryType.equals("value")) {
+								return '''
+								Table.read().db(
 									«(expression.target as VariableDeclaration).name».executeQuery()
 									).printAll().replaceAll("[^\\d.]+|\\.(?!\\d)", "");'''
-						} else {
-							return '''Table.read().db(
+							} else {
+								return '''
+								Table.read().db(
 									«(expression.target as VariableDeclaration).name».executeQuery()
 									);'''
+							}
+						} else if(databaseType.equals("nosql")) {
+							if(queryType.equals("select")) {
+								return '''
+									__generateTableFromNoSQLQuery(«connection.name».find(«expression.target.name»).cursor());'''
+							} else if(queryType.equals("delete")) {
+								return '''
+								«connection.name».deleteMany(«expression.target.name»).getDeletedCount();'''
+							} else if(queryType.equals("insert")) {
+								return '''
+								«connection.name».insertMany(«expression.target.name»);'''
+							} else if(queryType.equals("update")) {
+								return '''
+								«connection.name».updateMany(«expression.target.name»_filter, «expression.target.name»);'''
+							} else if(queryType.equals("replace")) {
+								return '''
+								«connection.name».replaceOne(«expression.target.name»_filter, Document.parse(«expression.target.name».toJson()));'''
+							}
 						}
-					}
-					
+					}					
+				}
+				case "distributed-query": {
+					if(expression.feature.equals("execute")) {
+						var queryType = (expression.target.right as DeclarationObject).features.get(1).value_s
+						if(queryType.equals("select")) {
+							return '''
+							(List <Table>) __executeDistributedQuery('S', «expression.target.name», «expression.target.name»Source);
+							'''
+						} else if(queryType.equals("delete")) {
+							return '''
+							(long) __executeDistributedQuery('D', «expression.target.name», «expression.target.name»Source);
+							'''				
+						} else if(queryType.equals("insert")) {
+							return '''
+							__executeDistributedQuery('I', «expression.target.name», «expression.target.name»Source);
+							'''
+						} else if(queryType.equals("update")) {
+							return '''
+							__executeDistributedQuery('U', «expression.target.name»Pair, «expression.target.name»Source);
+							'''
+						} else if(queryType.equals("replace")) {
+							return '''
+							__executeDistributedQuery('R', «expression.target.name»Pair, «expression.target.name»Source);
+							'''
+						}
+					}				
 				}
 				case "dataframe":{
 					if(expression.feature.equals("exportHeader")){
@@ -2528,7 +3052,7 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						return s
 					}
-		}else{
+		} else {
 			var s = expression.target.name + "." + expression.feature + "("
 			for (exp : expression.expressions) {
 				s += generateArithmeticExpression(exp, scope)
@@ -3072,6 +3596,32 @@ class FLYGenerator extends AbstractGenerator {
 						});
 						«call.target.name»_«func_ID»_return.add(__f);
 					}
+				'''
+			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) != null &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).equals("List <Table>")) {
+				s+='''
+				final int __numThread = (Integer) __fly_environment.get("«call.environment.name»").get("nthread");
+				ArrayList <ArrayList <Table>> __list_data_«call.target.name» = new ArrayList<> ();
+				for(int __i = 0; __i < __numThread; ++__i)
+					__list_data_«call.target.name».add(new ArrayList <Table> ());
+				for(int __j = 0; __j < «generateArithmeticExpression((call.input as FunctionInput).f_index,scope)».size(); ++__j) {
+					Table ___table = «generateArithmeticExpression((call.input as FunctionInput).f_index,scope)».get(__j);
+					for(int __i = 0; __i < __numThread; ++__i) 
+						__list_data_«call.target.name».get(__i).add(___table.emptyCopy());
+					for(int __i = 0; __i < ___table.rowCount(); ++__i)
+						__list_data_«call.target.name».get(__i % __numThread).get(__j).addRow(__i, ___table);
+				}
+				for(int __i = 0; __i < __numThread; ++__i) {
+				final ArrayList <Table> __tables = __list_data_«call.target.name».get(__i);
+				Future<Object> __f = __thread_pool_«call.environment.name».submit(new Callable<Object>() {
+					public Object call() throws Exception {
+						Object __ret = «call.target.name»(__tables);
+						return __ret;
+					}
+				});
+				«call.target.name»_«func_ID»_return.add(__f);
+				}
 				'''
 			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
 				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
@@ -4175,57 +4725,70 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						__scanner_«name».close();
 					'''
-			}else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("Directory")){ //TO-DO: add support directory
-					return '''
-						for (String __«(indexes.indices.get(0) as VariableDeclaration).name» : «(object as VariableLiteral).variable.name».list()) {
-							String «(indexes.indices.get(0) as VariableDeclaration).name» = «(object as VariableLiteral).variable.name».getAbsolutePath()+"/"+ __«(indexes.indices.get(0) as VariableDeclaration).name»;
-							«IF body instanceof BlockExpression»
-								«FOR exp : body.expressions »
-									«generateExpression(exp,scope)»
-								«ENDFOR»
-							«ELSE»
-								«generateExpression(body,scope)»
-							«ENDIF»
-						}
-					'''
-				}else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("String[]")){
-					return '''
-						for (String «(indexes.indices.get(0) as VariableDeclaration).name» : «(object as VariableLiteral).variable.name») {
-							«IF body instanceof BlockExpression»
-								«FOR exp : body.expressions »
-									«generateExpression(exp,scope)»
-								«ENDFOR»
-							«ELSE»
-								«generateExpression(body,scope)»
-							«ENDIF»
-						}
-					'''
-				}else if (typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("Table")){
+			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("Directory")){ //TO-DO: add support directory
+				return '''
+				for (String __«(indexes.indices.get(0) as VariableDeclaration).name» : «(object as VariableLiteral).variable.name».list()) {
+					String «(indexes.indices.get(0) as VariableDeclaration).name» = «(object as VariableLiteral).variable.name».getAbsolutePath()+"/"+ __«(indexes.indices.get(0) as VariableDeclaration).name»;
+					«IF body instanceof BlockExpression»
+						«FOR exp : body.expressions »
+								«generateExpression(exp,scope)»
+						«ENDFOR»
+					«ELSE»
+						«generateExpression(body,scope)»
+					«ENDIF»
+				}
+				'''
+			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("String[]")){
+				return '''
+				for (String «(indexes.indices.get(0) as VariableDeclaration).name» : «(object as VariableLiteral).variable.name») {
+					«IF body instanceof BlockExpression»
+						«FOR exp : body.expressions »
+							«generateExpression(exp,scope)»
+						«ENDFOR»
+					«ELSE»
+						«generateExpression(body,scope)»
+					«ENDIF»
+				}
+				'''
+			} else if (typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("Table")){
 				var name = (object as VariableLiteral).variable.name;
 				var index_name = (indexes.indices.get(0) as VariableDeclaration).name
 				typeSystem.get(scope).put(index_name,name);
-				
-					return '''
-						for(int _«name»=0; _«name»< «name».rowCount();_«name»++){
-							«IF body instanceof BlockExpression»
-								«FOR exp : body.expressions »
-									«generateExpression(exp,scope)»
-								«ENDFOR»
-							«ELSE»
-								«generateExpression(body,scope)»
-							«ENDIF»
-						}
-					'''
-				
-			}else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).contains("Array")){
-					var name = (object as VariableLiteral).variable.name;
-				
-					return '''
-						for(int «(indexes.indices.get(0) as VariableDeclaration).name» = 0;«(indexes.indices.get(0) as VariableDeclaration).name» < «name».length;«(indexes.indices.get(0) as VariableDeclaration).name»++){
-							«generateExpression(body,scope)»
-						}
-					'''
-			}else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).contains("Matrix")){
+				return '''
+				for(int _«name»=0; _«name»< «name».rowCount();_«name»++){
+					«IF body instanceof BlockExpression»
+						«FOR exp : body.expressions »
+							«generateExpression(exp,scope)»
+						«ENDFOR»
+					«ELSE»
+						«generateExpression(body,scope)»
+					«ENDIF»
+				}
+				'''
+			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("List <Table>")) {
+				var name = (object as VariableLiteral).variable.name;
+				(indexes.indices.get(0) as VariableDeclaration).typeobject='var'
+				var index_name = (indexes.indices.get(0) as VariableDeclaration).name
+				typeSystem.get(scope).put(index_name, "Table");
+				return '''
+				for(Table «index_name» : «name») {
+					«IF body instanceof BlockExpression»
+						«FOR exp : body.expressions »
+							«generateExpression(exp,scope)»
+						«ENDFOR»
+					«ELSE»
+						«generateExpression(body,scope)»
+					«ENDIF»
+				}
+				'''
+			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).contains("Array")){
+				var name = (object as VariableLiteral).variable.name;
+				return '''
+				for(int «(indexes.indices.get(0) as VariableDeclaration).name» = 0;«(indexes.indices.get(0) as VariableDeclaration).name» < «name».length;«(indexes.indices.get(0) as VariableDeclaration).name»++){
+					«generateExpression(body,scope)»
+				}
+				'''
+			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).contains("Matrix")){
 				var name = (object as VariableLiteral).variable.name;
 				var index_row = (indexes.indices.get(0) as VariableDeclaration).name
 				var index_col = (indexes.indices.get(1) as VariableDeclaration).name
@@ -4264,11 +4827,11 @@ class FLYGenerator extends AbstractGenerator {
 
 	def generateIfExpression(IfExpression expression, String scope) {
 		'''
-			if(«generateArithmeticExpression(expression.cond,scope)»)
-				«generateExpression(expression.then,scope)»
-				«IF expression.^else !== null»
-					else «generateExpression(expression.^else,scope)»
-				«ENDIF» 
+		if(«generateArithmeticExpression(expression.cond,scope)»)
+			«generateExpression(expression.then,scope)»
+			«IF expression.^else !== null»
+				else «generateExpression(expression.^else,scope)»
+			«ENDIF» 
 		'''
 	}
 
@@ -4678,13 +5241,30 @@ class FLYGenerator extends AbstractGenerator {
 						}
 					} else if (type.equals("query")){
 						var queryType = (exp.target.right as DeclarationObject).features.get(1).value_s
-						if (queryType.equals("update")){
-							return "int"
-						} else if(queryType.equals("value")){
-							return "String"
+						var typeDatabase = (((exp.target.right as DeclarationObject)
+								.features.get(2).value_f as VariableDeclaration).right as DeclarationObject).features.get(0).value_s
+						if(typeDatabase.equals("sql")) {
+							if(queryType.equals("update")){
+								return "int"
+							} else if(queryType.equals("value")){
+								return "String"
+							} else {
+								return "Table"
+							}
 						} else {
-							return "Table"
+							if(queryType.equals("select")){
+								return "List <Table>"
+							} else {
+								return "long"
+							}
 						}
+					} else if(type.equals("distributed-query")) {						
+						var queryType = (exp.target.right as DeclarationObject).features.get(1).value_s
+						if(queryType.equals("select")){
+							return "List <Table>"
+						} else {
+							return "long"
+						}							
 					}
 				} else if (exp.feature.equals("split")) { 
 					return "String[]"
