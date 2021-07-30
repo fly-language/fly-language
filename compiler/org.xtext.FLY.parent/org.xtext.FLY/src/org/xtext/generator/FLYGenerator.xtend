@@ -4284,11 +4284,9 @@ class FLYGenerator extends AbstractGenerator {
 		
 		if(!async){ 
 			ret+='''
-				int __messagges_«call.target.name»_«func_ID» = 0;
-				while(__messagges_«call.target.name»_«func_ID»!=__num_proc_«call.target.name»_«func_ID») {
-					__termination_«call.target.name»_ch.poll();
-					__messagges_«call.target.name»_«func_ID»++;
-				}
+				while(__termination_«call.target.name»_ch.size()!=__num_proc_«call.target.name»_«func_ID»)
+					;
+
 				__wait_on_termination_«call.target.name»=false;
 			'''
 		}
@@ -4577,11 +4575,9 @@ class FLYGenerator extends AbstractGenerator {
 		
 		if(!async){ 
 			ret+='''
-				int __messagges_«call.target.name»_«func_ID» = 0;
-				while(__messagges_«call.target.name»_«func_ID»!=__num_proc_«call.target.name»_«func_ID») {
-					__termination_«call.target.name»_ch.poll();
-					__messagges_«call.target.name»_«func_ID»++;
-				}
+				while(__termination_«call.target.name»_ch.size()!=__num_proc_«call.target.name»_«func_ID»)
+					;
+				
 				__wait_on_termination_«call.target.name»=false;
 			'''
 		}
