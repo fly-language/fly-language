@@ -204,6 +204,7 @@ class FLYGeneratorPython extends AbstractGenerator {
 		import math 
 		import pandas as pd
 		import json
+		import requests
 		from pymongo import MongoClient
 		
 		import socket
@@ -267,6 +268,7 @@ class FLYGeneratorPython extends AbstractGenerator {
 			import json
 			import urllib.request
 			import pymysql
+			import requests
 			from pymongo import MongoClient
 			
 			«IF env.contains("aws")»				
