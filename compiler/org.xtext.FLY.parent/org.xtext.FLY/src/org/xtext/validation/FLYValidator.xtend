@@ -3,13 +3,14 @@
  */
 package org.xtext.validation
 
+import com.google.inject.Inject
 import org.eclipse.xtext.validation.Check
 import org.xtext.fLY.DeclarationFeature
 import org.xtext.fLY.FLYPackage
 
 class FLYValidator extends AbstractFLYValidator {
 	
-//	@Inject extension FLYDotExpressionValidator
+	@Inject extension FLYDotExpressionValidator
 //	@Inject extension FLYDomainObjectValidator
 //	@Inject extension FLYOperationValidator
 //	@Inject extension FLYFlowControlValidator
