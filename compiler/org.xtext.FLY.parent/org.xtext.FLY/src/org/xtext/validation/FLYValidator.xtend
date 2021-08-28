@@ -15,7 +15,7 @@ class FLYValidator extends AbstractFLYValidator {
 //	@Inject extension FLYOperationValidator
 	@Inject extension FLYFlowControlValidator
 //	@Inject extension FLYObjectValidator
-//	@Inject extension FLYFunctionValidator
+	@Inject extension FLYFunctionValidator
 	
 	@Check
 	def checkFilePath(DeclarationFeature feature) {
