@@ -13,7 +13,7 @@ class FLYValidator extends AbstractFLYValidator {
 	@Inject extension FLYDotExpressionValidator
 	@Inject extension FLYDomainObjectValidator
 //	@Inject extension FLYOperationValidator
-//	@Inject extension FLYFlowControlValidator
+	@Inject extension FLYFlowControlValidator
 //	@Inject extension FLYObjectValidator
 //	@Inject extension FLYFunctionValidator
 	
