@@ -11,7 +11,7 @@ import org.xtext.fLY.FLYPackage
 class FLYValidator extends AbstractFLYValidator {
 	
 	@Inject extension FLYDotExpressionValidator
-//	@Inject extension FLYDomainObjectValidator
+	@Inject extension FLYDomainObjectValidator
 //	@Inject extension FLYOperationValidator
 //	@Inject extension FLYFlowControlValidator
 //	@Inject extension FLYObjectValidator
