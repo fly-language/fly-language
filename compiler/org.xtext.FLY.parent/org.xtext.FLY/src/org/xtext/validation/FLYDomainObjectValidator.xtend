@@ -413,7 +413,7 @@ class FLYDomainObjectValidator extends AbstractFLYValidator {
 			var feature = right.features.get(i)
 			
 			if (!expected.equals(feature.feature)) {
-				error(ENVERROR + String.format("expected attribute %s in position %d instead of %s", expected, i, feature.feature), meta, FLYValidationErrors.WRONG_AWS_DECLARATION)
+				error(ENVERROR + String.format("expected attribute %s in position %d instead of %s", expected, i, feature.feature), meta, FLYValidationErrors.WRONG_AZURE_DECLARATION)
 				return
 			} else if (!mins.keySet().contains(feature.feature) && feature.value_s.isNullOrEmpty) {
 				error(ENVERROR + String.format("attribute %s must be non-empty string", expected), meta, FLYValidationErrors.WRONG_AZURE_ATTR)
