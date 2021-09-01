@@ -1698,12 +1698,28 @@ class FLYGenerator extends AbstractGenerator {
 								ArrayList «dec.name» = new Gson().fromJson(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»,new TypeToken<ArrayList<Object>>() {}.getType());
 							'''
 						}
-					}else if((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp") ){ 
-						typeSystem.get(scope).put(dec.name, valuateArithmeticExpression((dec.right as CastExpression),scope))
-						println( typeSystem.get(scope))
-						return '''
-							«valuateArithmeticExpression((dec.right as CastExpression),scope)» «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)») «((dec.right as CastExpression).target as ChannelReceive).target.name».take(); 
-						'''
+					}else if((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp") ){
+						if ((dec.right as CastExpression).type.equals("Array")) {
+							
+						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
+								typeSystem.get(scope).put(dec.name,"Matrix_Object")
+								return '''
+									«valuateArithmeticExpression((dec.right as CastExpression),scope)»[][] «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)»[][]) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
+									if(«dec.name».getClass().getSimpleName().equals("Integer[][]")){
+						 				«dec.name» = (Integer[][]) «dec.name»;
+									} else if(«dec.name».getClass().getSimpleName().equals("Double[][]")){
+						 				«dec.name» = (Double[][]) «dec.name»;
+									} else if(x.getClass().getSimpleName().equals("String[][]")){
+						 				«dec.name» = (String[][]) «dec.name»;
+									}
+								'''
+						} else {
+							typeSystem.get(scope).put(dec.name, valuateArithmeticExpression((dec.right as CastExpression),scope))
+							println( typeSystem.get(scope))
+							return '''
+								«valuateArithmeticExpression((dec.right as CastExpression),scope)» «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)») «((dec.right as CastExpression).target as ChannelReceive).target.name».take(); 
+							'''
+						} 
 					}
 				}else { // if is an Expression to evaluate
 			
@@ -4609,44 +4625,44 @@ class FLYGenerator extends AbstractGenerator {
 			return "Double"
 		} else if (exp instanceof VariableLiteral) {
 			val variable = exp.variable
-		if (variable.typeobject.equals("var")) {
-			if (variable.right instanceof DeclarationObject) {
-				var type = (variable.right as DeclarationObject).features.get(0).value_s
-				switch (type) {
-					case "dataframe": {
-						return "Table"
+			if (variable.typeobject.equals("var") || variable.typeobject.equals("const")) {
+				if (variable.right instanceof DeclarationObject) {
+					var type = (variable.right as DeclarationObject).features.get(0).value_s
+					switch (type) {
+						case "dataframe": {
+							return "Table"
+						}
+						case "channel":{
+							return "channel"
+						}
+						case "random":{
+							return "Random"
+						}
+						case "file":{
+							if((variable.right as DeclarationObject).features.get(1).value_s != null){
+								var path = (variable.right as DeclarationObject).features.get(1).value_s.split("/")
+								var filename = path.get(path.length-1)
+								if (filename.split(".").length != 2)
+									return "String[]"
+								else
+									return "File"
+							}else
+							return "File"
+							
+						}
+						default: {
+							return "variable"
+						}
 					}
-					case "channel":{
-						return "channel"
-					}
-					case "random":{
-						return "Random"
-					}
-					case "file":{
-						if((variable.right as DeclarationObject).features.get(1).value_s != null){
-							var path = (variable.right as DeclarationObject).features.get(1).value_s.split("/")
-							var filename = path.get(path.length-1)
-							if (filename.split(".").length != 2)
-								return "String[]"
-							else
-								return "File"
-						}else
-						return "File"
-						
-					}
-					default: {
-						return "variable"
-					}
+				} else if (variable.right instanceof NameObjectDef) {
+					return "HashMap"
+				} else if (variable.right instanceof ArithmeticExpression) {
+					return valuateArithmeticExpression(variable.right as ArithmeticExpression, scope)
+				}else{
+					return typeSystem.get(scope).get(variable.name) // if it's a parameter of a FunctionDefinition
 				}
-			} else if (variable.right instanceof NameObjectDef) {
-				return "HashMap"
-			} else if (variable.right instanceof ArithmeticExpression) {
-				return valuateArithmeticExpression(variable.right as ArithmeticExpression, scope)
-			}else{
-				return typeSystem.get(scope).get(variable.name) // if it's a parameter of a FunctionDefinition
 			}
-		}
-		return "variable"
+			return "variable"
 		} else if (exp instanceof NameObject) {
 			return typeSystem.get(scope).get(exp.name.name + "." + exp.value)
 		} else if (exp instanceof IndexObject) {
