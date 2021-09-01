@@ -3704,8 +3704,8 @@ class FLYGenerator extends AbstractGenerator {
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
 							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
-							String matrixType = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
-							matrixType = matrixType.substring(0, matrixType.indexOf("["));
+							String matrixType_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
+							matrixType_«func_ID» = matrixType_«func_ID».substring(0, matrixType_«func_ID».indexOf("["));
 										
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 								int __n_rows_«func_ID» =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
@@ -3713,7 +3713,7 @@ class FLYGenerator extends AbstractGenerator {
 									__n_rows_«func_ID»++;
 								}
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType+"\",\"values\":[");
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType_«func_ID»+"\",\"values\":[");
 								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows_«func_ID»;__j++){
 									for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
