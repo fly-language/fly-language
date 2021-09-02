@@ -4388,7 +4388,7 @@ class FLYGenerator extends AbstractGenerator {
 			ret+='''				
 				while(__termination_«call.target.name»_ch_«func_termination_counter».size()!=__num_proc_«call.target.name»_«func_ID»)
 					;
-				
+          
 				__wait_on_termination_«call.target.name»_«func_termination_counter++»=false;
 			'''
 		}
