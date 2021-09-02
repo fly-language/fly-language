@@ -85,6 +85,8 @@ class FLYGenerator extends AbstractGenerator {
 	var id_execution = System.currentTimeMillis
 	var last_func_result = null
 	var deployed_function = new HashMap<String,ArrayList<String>>();
+	var func_undeploy_counter = -1
+	var func_termination_counter = 0
 	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure","vm-cluster"));
 	Resource res = null
 
@@ -197,6 +199,18 @@ class FLYGenerator extends AbstractGenerator {
 	import org.apache.commons.io.FileUtils;
 	import org.apache.commons.io.FileUtils;
 	import java.sql.*;
+	import com.mongodb.MongoClient;
+	import com.mongodb.MongoClientURI;
+	import com.mongodb.client.MongoCollection;
+	import com.mongodb.client.MongoCursor;
+	import org.bson.*;
+	import java.io.FileReader;
+	import com.opencsv.CSVReader;
+	import java.util.Properties;
+	import org.apache.log4j.PropertyConfigurator;
+	import java.util.Iterator;
+	import tech.tablesaw.api.StringColumn;
+	import tech.tablesaw.api.IntColumn;
 
 	«IF checkAzure()»
 	import isislab.azureclient.AzureClient;
@@ -578,6 +592,18 @@ class FLYGenerator extends AbstractGenerator {
 	import org.apache.commons.io.FileUtils;
 	import org.apache.commons.io.FileUtils;
 	import java.sql.*;
+	import com.mongodb.MongoClient;
+	import com.mongodb.MongoClientURI;
+	import com.mongodb.client.MongoCollection;
+	import com.mongodb.client.MongoCursor;
+	import org.bson.*;
+	import java.io.FileReader;
+	import com.opencsv.CSVReader;
+	import java.util.Properties;
+	import org.apache.log4j.PropertyConfigurator;
+	import java.util.Iterator;
+	import tech.tablesaw.api.StringColumn;
+	import tech.tablesaw.api.IntColumn;
 
 		«IF checkAzure()»
 		import isislab.azureclient.AzureClient;
@@ -671,7 +697,13 @@ class FLYGenerator extends AbstractGenerator {
 	
 	
 		
-	def CharSequence compileJava(Resource resource) '''
+ 	def CharSequence compileJava(Resource resource){
+	var termination_init_counter = 0
+	var termination_counter = 0
+	func_termination_counter = 0
+	
+ 	var s = ""
+ 	s += '''
 	import java.io.File;
 	import java.io.FileInputStream;
 	import java.io.InputStreamReader;
@@ -788,6 +820,9 @@ class FLYGenerator extends AbstractGenerator {
 	import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
 		«ENDIF»
 	import com.google.gson.Gson;
+	import com.google.gson.JsonArray;
+	import com.google.gson.JsonObject;
+	import com.google.gson.JsonParser;
 	import com.google.gson.reflect.TypeToken;
 		«IF checkAzure()»
 	import com.microsoft.azure.management.resources.fluentcore.arm.Region;
@@ -812,7 +847,7 @@ class FLYGenerator extends AbstractGenerator {
 				«ENDIF»
 			«ENDFOR»
 			«FOR element : resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-				static boolean __wait_on_termination_«element.target.name» = true;
+				static boolean __wait_on_termination_«element.target.name»_«termination_init_counter++» = true;
 			«ENDFOR»
 			
 			public static void main(String[] args) throws Exception{
@@ -897,7 +932,7 @@ class FLYGenerator extends AbstractGenerator {
 					«ENDIF»
 				«ENDFOR»
 				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-						«generateTerminationQueue(element)»
+						«generateTerminationQueue(element, termination_counter++)»
 				«ENDFOR»
 				
 				«FOR element : resource.allContents.toIterable.filter(Expression)»
@@ -922,187 +957,6 @@ class FLYGenerator extends AbstractGenerator {
 					«generateFunctionDefinition(element)»
 				«ENDIF»	
 			«ENDFOR»	
-
-			private static List <Table> __generateTableFromNoSQLQuery(MongoCursor <Document> ___mongoCursor) {
-					List <Table> ___resultGenerateTableFromNoSQLQuery = new ArrayList <> ();
-							
-				if(!___mongoCursor.hasNext()) 
-					return ___resultGenerateTableFromNoSQLQuery;
-										
-				org.json.JSONObject ___jsonObject;
-				ArrayList <ArrayList <String>> ___listFeatures = new ArrayList <> ();
-				ArrayList <org.json.JSONArray> ___listObjects = new ArrayList <> ();
-														
-				while(___mongoCursor.hasNext()) {
-					___jsonObject = new org.json.JSONObject(___mongoCursor.next().toJson());
-					Iterator <String> ___iteratorJsonObjectKeys = ___jsonObject.keys();
-					ArrayList <String> ___listFeaturesCurrent = new ArrayList <String> ();
-					
-					while(___iteratorJsonObjectKeys.hasNext())
-						___listFeaturesCurrent.add(___iteratorJsonObjectKeys.next());
-					
-					int ___i = 0;
-					for(; ___i < ___listFeatures.size(); ++___i)
-						if(___listFeatures.get(___i).equals(___listFeaturesCurrent))
-							break;
-					
-					if(___i >= ___listFeatures.size()) {
-						___listFeatures.add(___listFeaturesCurrent);
-						org.json.JSONArray ___listObjectForThisFeatures = new org.json.JSONArray();
-						___listObjectForThisFeatures.put(___jsonObject);
-						___listObjects.add(___listObjectForThisFeatures);
-					} else
-						___listObjects.get(___i).put(___jsonObject);
-				}
-				
-				for(int ___i = 0; ___i < ___listFeatures.size(); ++___i) {
-					Table ___table = Table.create();
-					ArrayList <String> ___features = ___listFeatures.get(___i);
-					org.json.JSONArray ___objects = ___listObjects.get(___i);
-					
-					for(Column <?> ___column : ___generateColumns("", ___features, ___objects))
-						___table.addColumns(___column);
-					
-					___resultGenerateTableFromNoSQLQuery.add(___table);
-				}			
-				return 	___resultGenerateTableFromNoSQLQuery;		
-				
-			}
-			
-			private static List <Column <?>> ___generateColumns(
-					String ___nameColumn, List <String> ___features, org.json.JSONArray ___objects) {
-				List <Column <?>> ___columns = new ArrayList <> ();
-				int ___j = 0;
-				
-				for(String ___feature : ___features) {				
-					org.json.JSONObject ___object = ___objects.getJSONObject(0);
-					Object ___value = ___object.get(___feature);
-					
-					if(___value instanceof org.json.JSONObject) {
-						___columns.add(StringColumn.create(___feature, ((org.json.JSONObject) ___value).toString()));
-						
-						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
-							___object = ___objects.getJSONObject(___i);
-							___value = ___object.get(___feature);
-					
-							((StringColumn) ___columns.get(___j)).append(((org.json.JSONObject) ___value).toString());
-						}
-						++___j;
-											
-					} else if(___value instanceof org.json.JSONArray) {
-						___columns.add(StringColumn.create(___feature, ((org.json.JSONArray) ___value).toString()));
-						
-						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
-							___object = ___objects.getJSONObject(___i);
-							___value = ___object.get(___feature);
-						
-							((StringColumn) ___columns.get(___j)).append(((org.json.JSONArray) ___value).toString());
-						}
-						++___j;
-						
-					} else {
-					
-						if(___value instanceof Integer) {
-							IntColumn ___columnToAdd = IntColumn.create(___nameColumn + ___feature);
-							___columnToAdd.append((Integer) ___value);
-							___columns.add(___columnToAdd);
-						} else				
-							___columns.add(StringColumn.create(___nameColumn +___feature, "" + ___value));
-						
-						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
-							___object = ___objects.getJSONObject(___i);
-							___value = ___object.get(___feature);
-							
-							if(___value instanceof Integer)
-								((IntColumn) ___columns.get(___j)).append((Integer) ___value);
-							else
-								((StringColumn) ___columns.get(___j)).append("" + ___value);					
-						}
-						++___j;
-								
-					}								
-				}			
-				return ___columns;
-					
-			}
-			
-			@SuppressWarnings("unchecked")
-			private static Object __executeDistributedQuery(char typeQuery, Object query, ArrayList <MongoCollection <Document>> sourceList) {
-				switch(typeQuery) {			
-					case 'S':
-						List <Table> __table = new ArrayList <> ();
-						for(MongoCollection <Document> source: sourceList) {
-							List <Table> __tmp = __generateTableFromNoSQLQuery(source.find((BsonDocument) query).cursor());
-							if(__table.size() == 0)
-								__table = __tmp;
-							else {
-								for(int i = 0; i < __table.size(); i++) {
-									boolean flag = false;
-								
-									for(int j = 0; j < __tmp.size(); j++) {										
-										if(__table.get(i).columnCount() == __tmp.get(j).columnCount()) {
-											// Se le colonne hanno lo stesso numero
-											Iterator <String> iterator = __table.get(i).columnNames().iterator();
-											Iterator <String> iteratorTmp = __tmp.get(j).columnNames().iterator();
-											
-											// Controllo se effettivamente le colonne sono uguali
-											int countIterator = 0;
-											int countColumns = __table.get(i).columnCount();
-											
-											while(iterator.hasNext()) {											
-												if(iterator.next().equals(iteratorTmp.next()))
-														countIterator++;
-												else break;											
-											}
-											
-											// Controllo sui contatori
-											if(countIterator == countColumns) { // Se sono uguali, le colonne sono uguali
-												__table.get(i).append(__tmp.get(j));
-												__tmp.remove(j); // Rimuovo la tabella appena aggiunta+
-												flag = true;
-												break;
-											} else { // Se non sono uguali, le colonne sono diverse, allora continuiamo
-												continue;
-											}																				
-										}																	
-									}
-									
-									if(flag) // Se sono uscito dal for precedente per un interruzione, vuol dire che una tabella presenta nella lista di ritorno è stata incrementata
-										continue;								
-								}
-								
-							__table.addAll(__tmp); // Tutte le tabelle che non possono essere incrementate, vengono aggiunte come nuove tabelle
-							
-							}
-						}
-						return __table;
-					
-					case 'D':
-						long countDelete = 0;
-						for(MongoCollection <Document> source: sourceList)
-							countDelete += source.deleteMany((BsonDocument) query).getDeletedCount();
-						return countDelete;
-					
-					case 'I':
-						for(MongoCollection <Document> source: sourceList)
-							source.insertMany((List <Document>) query);
-						return null;
-							
-					case 'U':
-						for(MongoCollection <Document> source: sourceList)
-							source.updateMany(((ArrayList<BsonDocument>) query).get(0), ((ArrayList<BsonDocument>) query).get(1));
-						return null;
-					
-					case 'R':
-						for(MongoCollection <Document> source: sourceList)
-							source.replaceOne(((ArrayList<BsonDocument>) query).get(0), Document.parse((((ArrayList<BsonDocument>) query).get(1).toJson())));
-						return null;
-					
-					default: 
-						return null;
-				}
-				
-			}
 
 			private static String __generateString(Table t,int id) {
 				StringBuilder b = new StringBuilder();
@@ -1135,10 +989,193 @@ class FLYGenerator extends AbstractGenerator {
 				b.append("]}");
 				return b.toString();
 			}
-		
+
+			private static List <Table> __generateTableFromNoSQLQuery(MongoCursor <Document> ___mongoCursor) {
+				List <Table> ___resultGenerateTableFromNoSQLQuery = new ArrayList <> ();
+
+				if(!___mongoCursor.hasNext()) 
+					return ___resultGenerateTableFromNoSQLQuery;
+
+				org.json.JSONObject ___jsonObject;
+				ArrayList <ArrayList <String>> ___listFeatures = new ArrayList <> ();
+				ArrayList <org.json.JSONArray> ___listObjects = new ArrayList <> ();
+
+				while(___mongoCursor.hasNext()) {
+					___jsonObject = new org.json.JSONObject(___mongoCursor.next().toJson());
+					Iterator <String> ___iteratorJsonObjectKeys = ___jsonObject.keys();
+					ArrayList <String> ___listFeaturesCurrent = new ArrayList <String> ();
+
+					while(___iteratorJsonObjectKeys.hasNext())
+						___listFeaturesCurrent.add(___iteratorJsonObjectKeys.next());
+
+					int ___i = 0;
+					for(; ___i < ___listFeatures.size(); ++___i)
+						if(___listFeatures.get(___i).equals(___listFeaturesCurrent))
+							break;
+
+					if(___i >= ___listFeatures.size()) {
+						___listFeatures.add(___listFeaturesCurrent);
+						org.json.JSONArray ___listObjectForThisFeatures = new org.json.JSONArray();
+						___listObjectForThisFeatures.put(___jsonObject);
+						___listObjects.add(___listObjectForThisFeatures);
+					} else
+						___listObjects.get(___i).put(___jsonObject);
+				}
+
+				for(int ___i = 0; ___i < ___listFeatures.size(); ++___i) {
+					Table ___table = Table.create();
+					ArrayList <String> ___features = ___listFeatures.get(___i);
+					org.json.JSONArray ___objects = ___listObjects.get(___i);
+
+					for(Column <?> ___column : ___generateColumns("", ___features, ___objects))
+						___table.addColumns(___column);
+
+					___resultGenerateTableFromNoSQLQuery.add(___table);
+				}			
+				return 	___resultGenerateTableFromNoSQLQuery;		
+
+			}
+
+			private static List <Column <?>> ___generateColumns(
+					String ___nameColumn, List <String> ___features, org.json.JSONArray ___objects) {
+				List <Column <?>> ___columns = new ArrayList <> ();
+				int ___j = 0;
+
+				for(String ___feature : ___features) {				
+					org.json.JSONObject ___object = ___objects.getJSONObject(0);
+					Object ___value = ___object.get(___feature);
+
+					if(___value instanceof org.json.JSONObject) {
+						___columns.add(StringColumn.create(___feature, ((org.json.JSONObject) ___value).toString()));
+
+						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+							___object = ___objects.getJSONObject(___i);
+							___value = ___object.get(___feature);
+
+							((StringColumn) ___columns.get(___j)).append(((org.json.JSONObject) ___value).toString());
+						}
+						++___j;
+
+					} else if(___value instanceof org.json.JSONArray) {
+						___columns.add(StringColumn.create(___feature, ((org.json.JSONArray) ___value).toString()));
+
+						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+							___object = ___objects.getJSONObject(___i);
+							___value = ___object.get(___feature);
+
+							((StringColumn) ___columns.get(___j)).append(((org.json.JSONArray) ___value).toString());
+						}
+						++___j;
+
+					} else {
+
+						if(___value instanceof Integer) {
+							IntColumn ___columnToAdd = IntColumn.create(___nameColumn + ___feature);
+							___columnToAdd.append((Integer) ___value);
+							___columns.add(___columnToAdd);
+						} else				
+							___columns.add(StringColumn.create(___nameColumn +___feature, "" + ___value));
+
+						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+							___object = ___objects.getJSONObject(___i);
+							___value = ___object.get(___feature);
+
+							if(___value instanceof Integer)
+								((IntColumn) ___columns.get(___j)).append((Integer) ___value);
+							else
+								((StringColumn) ___columns.get(___j)).append("" + ___value);					
+						}
+						++___j;
+
+					}								
+				}			
+				return ___columns;
+
+			}
+
+			@SuppressWarnings("unchecked")
+			private static Object __executeDistributedQuery(char typeQuery, Object query, ArrayList <MongoCollection <Document>> sourceList) {
+				switch(typeQuery) {			
+					case 'S':
+						List <Table> __table = new ArrayList <> ();
+						for(MongoCollection <Document> source: sourceList) {
+							List <Table> __tmp = __generateTableFromNoSQLQuery(source.find((BsonDocument) query).cursor());
+							if(__table.size() == 0)
+								__table = __tmp;
+							else {
+								for(int i = 0; i < __table.size(); i++) {
+									boolean flag = false;
+
+									for(int j = 0; j < __tmp.size(); j++) {										
+										if(__table.get(i).columnCount() == __tmp.get(j).columnCount()) {
+											// Se le colonne hanno lo stesso numero
+											Iterator <String> iterator = __table.get(i).columnNames().iterator();
+											Iterator <String> iteratorTmp = __tmp.get(j).columnNames().iterator();
+
+											// Controllo se effettivamente le colonne sono uguali
+											int countIterator = 0;
+											int countColumns = __table.get(i).columnCount();
+
+											while(iterator.hasNext()) {											
+												if(iterator.next().equals(iteratorTmp.next()))
+														countIterator++;
+												else break;											
+											}
+
+											// Controllo sui contatori
+											if(countIterator == countColumns) { // Se sono uguali, le colonne sono uguali
+												__table.get(i).append(__tmp.get(j));
+												__tmp.remove(j); // Rimuovo la tabella appena aggiunta+
+												flag = true;
+												break;
+											} else { // Se non sono uguali, le colonne sono diverse, allora continuiamo
+												continue;
+											}																				
+										}																	
+									}
+
+									if(flag) // Se sono uscito dal for precedente per un interruzione, vuol dire che una tabella presenta nella lista di ritorno è stata incrementata
+										continue;								
+								}
+
+							__table.addAll(__tmp); // Tutte le tabelle che non possono essere incrementate, vengono aggiunte come nuove tabelle
+
+							}
+						}
+						return __table;
+
+					case 'D':
+						long countDelete = 0;
+						for(MongoCollection <Document> source: sourceList)
+							countDelete += source.deleteMany((BsonDocument) query).getDeletedCount();
+						return countDelete;
+
+					case 'I':
+						for(MongoCollection <Document> source: sourceList)
+							source.insertMany((List <Document>) query);
+						return null;
+
+					case 'U':
+						for(MongoCollection <Document> source: sourceList)
+							source.updateMany(((ArrayList<BsonDocument>) query).get(0), ((ArrayList<BsonDocument>) query).get(1));
+						return null;
+
+					case 'R':
+						for(MongoCollection <Document> source: sourceList)
+							source.replaceOne(((ArrayList<BsonDocument>) query).get(0), Document.parse((((ArrayList<BsonDocument>) query).get(1).toJson())));
+						return null;
+
+					default: 
+						return null;
+				}
+
+			}	
+	
 	}
 	'''
-		
+	return s
+}
+
 		def undeployFlyFunctionOnCloud(FlyFunctionCall call) {
 			var env = (call.environment.right as DeclarationObject).features.get(0).value_s
 			if(deployed_function.get(env).contains(call.target.name)){
@@ -1146,23 +1183,24 @@ class FLYGenerator extends AbstractGenerator {
 				var user = (call.environment.right as DeclarationObject).features.get(1).value_s
 				var cred = call.environment.name
 				switch env {
-					case "aws": {
+					case "aws":{
+						func_undeploy_counter++
 						return '''
 							Runtime.getRuntime().exec("chmod +x src-gen/«call.target.name»_«call.environment.name»_undeploy.sh");
-							ProcessBuilder __processBuilder_undeploy_«call.target.name» = new ProcessBuilder("/bin/bash", "-c", "src-gen/«call.target.name»_«call.environment.name»_undeploy.sh «user» «call.target.name» "+__id_execution);
-							Map<String, String> __env_undeploy_«call.target.name» = __processBuilder_undeploy_«call.target.name».environment();
+							ProcessBuilder __processBuilder_undeploy_«call.target.name»_«func_undeploy_counter» = new ProcessBuilder("/bin/bash", "-c", "src-gen/«call.target.name»_«call.environment.name»_undeploy.sh «user» «call.target.name» "+__id_execution);
+							Map<String, String> __env_undeploy_«call.target.name»_«func_undeploy_counter» = __processBuilder_undeploy_«call.target.name»_«func_undeploy_counter».environment();
 							
-							__processBuilder_undeploy_«call.target.name».redirectOutput(ProcessBuilder.Redirect.INHERIT);
-							__processBuilder_undeploy_«call.target.name».redirectError(ProcessBuilder.Redirect.INHERIT);
-							String __path_env_undeploy_«call.target.name» = __env_undeploy_«call.target.name».get("PATH");
-							if (!__path_env_undeploy_«call.target.name».contains("/usr/local/bin")) {
-								 __env_undeploy_«call.target.name».put("PATH", __path_env_undeploy_«call.target.name»+":/usr/local/bin");
+							__processBuilder_undeploy_«call.target.name»_«func_undeploy_counter».redirectOutput(ProcessBuilder.Redirect.INHERIT);
+							__processBuilder_undeploy_«call.target.name»_«func_undeploy_counter».redirectError(ProcessBuilder.Redirect.INHERIT);
+							String __path_env_undeploy_«call.target.name»_«func_undeploy_counter» = __env_undeploy_«call.target.name»_«func_undeploy_counter».get("PATH");
+							if (!__path_env_undeploy_«call.target.name»_«func_undeploy_counter».contains("/usr/local/bin")) {
+								 __env_undeploy_«call.target.name»_«func_undeploy_counter».put("PATH", __path_env_undeploy_«call.target.name»_«func_undeploy_counter»+":/usr/local/bin");
 							}
-							Process __p_undeploy_«call.target.name»;
+							Process __p_undeploy_«call.target.name»_«func_undeploy_counter»;
 							try {
-								__p_undeploy_«call.target.name»= __processBuilder_undeploy_«call.target.name».start();
-								__p_undeploy_«call.target.name».waitFor();
-								if(__p_undeploy_«call.target.name».exitValue()!=0){
+								__p_undeploy_«call.target.name»_«func_undeploy_counter»= __processBuilder_undeploy_«call.target.name»_«func_undeploy_counter».start();
+								__p_undeploy_«call.target.name»_«func_undeploy_counter».waitFor();
+								if(__p_undeploy_«call.target.name»_«func_undeploy_counter».exitValue()!=0){
 									System.out.println("Error in «call.target.name»_«call.environment.name»_undeploy.sh ");
 									System.exit(1);
 								}
@@ -1171,7 +1209,7 @@ class FLYGenerator extends AbstractGenerator {
 							}	
 							'''			
 					} 
-					case "aws-debug": {
+					case "aws-debug":{
 						return '''
 							Runtime.getRuntime().exec("chmod +x src-gen/«call.target.name»_«call.environment.name»_undeploy.sh");
 							ProcessBuilder __processBuilder_undeploy_«call.target.name» = new ProcessBuilder("/bin/bash", "-c", "src-gen/«call.target.name»_«call.environment.name»_undeploy.sh «user» «call.target.name» "+__id_execution);
@@ -1204,7 +1242,7 @@ class FLYGenerator extends AbstractGenerator {
 				}
 
 					
-			} else
+			}else
 				return ''''''
 		}
 		
@@ -1215,7 +1253,7 @@ class FLYGenerator extends AbstractGenerator {
 			if (!deployed_function.get(environment).contains(call.target.name)){
 				deployed_function.get(environment).add(call.target.name)
 				
-				if(environment.contains("aws")) {
+				if(environment.contains("aws")){
 					var user = (call.environment.right as DeclarationObject).features.get(1).value_s
 					var cred = call.environment.name
 					return '''
@@ -1247,7 +1285,7 @@ class FLYGenerator extends AbstractGenerator {
 						}));
 						
 						'''	
-				} else if((call.environment.right as DeclarationObject).features.get(0).value_s.equals("azure")) {
+				}else if((call.environment.right as DeclarationObject).features.get(0).value_s.equals("azure")) {
 					return '''
 						__termination_deploy_on_cloud.add(__thread_pool_deploy_on_cloud.submit( new Callable<Object> (){
 							@Override
@@ -1438,7 +1476,7 @@ class FLYGenerator extends AbstractGenerator {
 								.build();
 						'''
 					}
-					case "azure": {
+					case "azure":{
 						var client_id = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
 						var tenant_id = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
 						var secret_key = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s
@@ -1449,12 +1487,12 @@ class FLYGenerator extends AbstractGenerator {
 						static AzureClient «dec.name» = null;
 						'''
 					}
-					case "random": {
+					case "random":{
 						return '''
 							Random «dec.name» = new Random();
 							'''
 					}
-					case "channel": {
+					case "channel":{
 						var env = (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s
 						return '''
 							static LinkedTransferQueue<Object> «dec.name» = new LinkedTransferQueue<Object>();
@@ -1493,7 +1531,7 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						
 					}
-					case "dataframe": {
+					case "dataframe":{
 						var table_name = (dec.right as DeclarationObject).features.get(1).value_s
 						var source = (dec.right as DeclarationObject).features.get(2)
 						var separator = "";
@@ -1524,16 +1562,16 @@ class FLYGenerator extends AbstractGenerator {
 							).executeQuery());
 							«ENDIF»
 							'''
-						} else {
+						}else{
 							var region = "";
 							var uri = "";
-							if (dec.onCloud && ! (source.value_s.contains("https://"))) {
+							if (dec.onCloud && ! (source.value_s.contains("https://"))){
 								region = (dec.environment.get(0).right as DeclarationObject).features.get(4).value_s
-								if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("aws")) {
+								if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("aws")){
 									uri = '''"https://«name»"+__id_execution+".s3.«region».amazonaws.com/bucket-"+__id_execution+"/«source.value_s»"'''
-								} else if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("azure")) {
+								} else if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("azure")){
 									uri = '''"https://flysa"+__id_execution+".blob.core.windows.net/bucket-"+__id_execution+"/«source.value_s»"'''
-								} else if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("aws-debug")) {
+								} else if(((dec.environment.get(0).right as DeclarationObject).features.get(0).value_s).equals("aws-debug")){
 									uri = '''"https://«name»"+__id_execution+".s3.«region».amazonaws.com/bucket-"+__id_execution+"/«source.value_s»"'''
 								} 
 							} else{
@@ -1552,8 +1590,8 @@ class FLYGenerator extends AbstractGenerator {
 							'''
 						}
 					}
-					case "sql": {
-						if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("aws")) {
+					case "sql":{
+						if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("aws")){
 							var instance = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
 							var db_name = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
 							var user_name = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s
@@ -1570,7 +1608,7 @@ class FLYGenerator extends AbstractGenerator {
 								Class.forName("com.mysql.jdbc.Driver").newInstance();
 								Connection «dec.name» = DriverManager.getConnection("jdbc:mysql://" + __endpoint_«dec.name».getAddress() + "/«db_name»?user=«user_name»&password=«password»");
 							'''	 					
-						} else if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure")) {
+						}else if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure")){
 							var resource_group = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
 							var instance = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
 							var db_name = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s
@@ -1596,6 +1634,7 @@ class FLYGenerator extends AbstractGenerator {
 							Connection «dec.name» = DriverManager.getConnection("jdbc:mysql://«endpoint»/«db_name»?user=«user_name»&password=«password»");
 							'''	 
 						}
+						
 					}
 					case "nosql":{
 						if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure")) {
@@ -1628,9 +1667,9 @@ class FLYGenerator extends AbstractGenerator {
 										e.printStackTrace();
 									}
 								}
-													
+
 								PropertyConfigurator.configure("log4j.properties");
-														
+
 								MongoClient «dec.name»Client = new MongoClient(new MongoClientURI(«IF 
 								((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s.nullOrEmpty
 								»«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_f.name
@@ -1645,7 +1684,7 @@ class FLYGenerator extends AbstractGenerator {
 								»«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_f.name
 								»«ELSE
 								»"«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»"«ENDIF»);
-													
+
 								MongoClient «dec.name»Client = new MongoClient(new MongoClientURI(«IF 
 								((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s.nullOrEmpty
 								»«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_f.name
@@ -1671,7 +1710,7 @@ class FLYGenerator extends AbstractGenerator {
 							}
 							return '''
 							PreparedStatement «dec.name» = «connection».prepareStatement(
-							«IF 
+							«IF
 							((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
 							»
 							«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
@@ -1732,10 +1771,10 @@ class FLYGenerator extends AbstractGenerator {
 										String ___«dec.name»Statement = «((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»;
 										if(___«dec.name»Statement.charAt(0) != '[')
 											___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
-										
+
 										org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
 										List <Document> «dec.name» = new ArrayList <Document> ();
-										
+
 										for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
 											«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
 										'''
@@ -1745,10 +1784,10 @@ class FLYGenerator extends AbstractGenerator {
 									String ___«dec.name»Statement = "«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»";
 									if(___«dec.name»Statement.charAt(0) != '[')
 										___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
-										
+
 									org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
 									List <Document> «dec.name» = new ArrayList <Document> ();
-										
+
 									for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
 										«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
 									'''
@@ -1762,7 +1801,7 @@ class FLYGenerator extends AbstractGenerator {
 									«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
 									« ELSE » 
 									"«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
-																				
+
 									BsonDocument «dec.name» = Document.parse(«IF 
 									((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s.nullOrEmpty
 									»
@@ -1798,7 +1837,7 @@ class FLYGenerator extends AbstractGenerator {
 							«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»
 							« ELSE » 
 								"«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
-												
+
 							ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
 							'''
 							for(i : 3 ..< (dec.right as DeclarationObject).features.size)					
@@ -1826,7 +1865,7 @@ class FLYGenerator extends AbstractGenerator {
 												«dec.name».add(___dcmnt_tmp);
 											}
 										}
-															
+
 										ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
 										'''
 															
@@ -1847,7 +1886,7 @@ class FLYGenerator extends AbstractGenerator {
 
 									for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
 										«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
-															
+
 									ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
 									'''
 														
@@ -1867,7 +1906,7 @@ class FLYGenerator extends AbstractGenerator {
 
 								for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
 									«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
-														
+
 								ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
 								'''
 																						
@@ -1886,7 +1925,7 @@ class FLYGenerator extends AbstractGenerator {
 							«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»
 							« ELSE » 
 								"«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
-												
+
 							BsonDocument «dec.name» = Document.parse(«IF 
 								((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
 							»
@@ -1904,7 +1943,7 @@ class FLYGenerator extends AbstractGenerator {
 								«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
 								'''
 							return ret;	
-						}
+						} 
 					}
 					default: {
 						return ''''''
@@ -2109,6 +2148,49 @@ class FLYGenerator extends AbstractGenerator {
 							return '''
 								String «dec.name» = (String) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
 							'''
+						} else if ((dec.right as CastExpression).type.equals("Array")) {
+							
+						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
+								typeSystem.get(scope).put(dec.name,"Matrix_Object")
+								return '''
+									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
+									JsonObject jsonObject = new JsonParser().parse(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»).getAsJsonObject();
+									
+									int n_rows = jsonObject.get("rows").getAsInt();
+									int n_cols = jsonObject.get("cols").getAsInt();
+									int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+									String matrixType = jsonObject.get("matrixType").getAsString();
+											        
+									//convert matrix json string to matrix in java
+									String valuesJson = jsonObject.getAsJsonArray("values").toString();
+									String extractedItems = valuesJson.replaceAll("\\[", "").replaceAll("\\]", "").replaceAll("\\s", "");
+									String[] items = extractedItems.split(",");	  
+																				
+									Object [][] «dec.name» = new Object[n_rows][n_cols];
+									if(matrixType.equals("Double")){
+										int itemCount = 0;
+										for (int j=0; j < n_rows; j++) {
+											for(int k=0; k< n_cols; k++) {
+												«dec.name»[j][k] = Double.parseDouble(items[itemCount++]);
+											}
+										}
+									}else if (matrixType.equals("Integer")){
+										int itemCount = 0;
+										for (int j=0; j < n_rows; j++) {
+											for(int k=0; k< n_cols; k++) {
+												«dec.name»[j][k] = Integer.parseInt(items[itemCount++]);
+											}
+										}
+									}else {
+										//it is a string
+										int itemCount = 0;
+										for (int j=0; j < n_rows; j++) {
+											for(int k=0; k< n_cols; k++) {
+												x[j][k] = items[itemCount++];
+											}
+										}
+									}
+								'''
 						} else if ((dec.right as CastExpression).type.equals("ArrayList")) {
 							typeSystem.get(scope).put(dec.name, "ArrayList")
 							return '''
@@ -2116,12 +2198,28 @@ class FLYGenerator extends AbstractGenerator {
 								ArrayList «dec.name» = new Gson().fromJson(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»,new TypeToken<ArrayList<Object>>() {}.getType());
 							'''
 						}
-					}else if((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp") ){ 
-						typeSystem.get(scope).put(dec.name, valuateArithmeticExpression((dec.right as CastExpression),scope))
-						println( typeSystem.get(scope))
-						return '''
-							«valuateArithmeticExpression((dec.right as CastExpression),scope)» «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)») «((dec.right as CastExpression).target as ChannelReceive).target.name».take(); 
-						'''
+					}else if((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp") ){
+						if ((dec.right as CastExpression).type.equals("Array")) {
+							
+						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
+								typeSystem.get(scope).put(dec.name,"Matrix_Object")
+								return '''
+									«valuateArithmeticExpression((dec.right as CastExpression),scope)»[][] «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)»[][]) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
+									if(«dec.name».getClass().getSimpleName().equals("Integer[][]")){
+						 				«dec.name» = (Integer[][]) «dec.name»;
+									} else if(«dec.name».getClass().getSimpleName().equals("Double[][]")){
+						 				«dec.name» = (Double[][]) «dec.name»;
+									} else if(x.getClass().getSimpleName().equals("String[][]")){
+						 				«dec.name» = (String[][]) «dec.name»;
+									}
+								'''
+						} else {
+							typeSystem.get(scope).put(dec.name, valuateArithmeticExpression((dec.right as CastExpression),scope))
+							println( typeSystem.get(scope))
+							return '''
+								«valuateArithmeticExpression((dec.right as CastExpression),scope)» «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)») «((dec.right as CastExpression).target as ChannelReceive).target.name».take(); 
+							'''
+						} 
 					}
 				}else { // if is an Expression to evaluate
 			
@@ -2220,7 +2318,7 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						ret+='''};'''
 						return ret
-					} else if (((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) instanceof ArrayValue){ //matrix 3d
+					}else if (((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) instanceof ArrayValue){ //matrix 3d
 						if ((((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) as ArrayValue).values.get(0) instanceof NumberLiteral ||
 							(((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) as ArrayValue).values.get(0) instanceof StringLiteral ||
 							(((dec.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) as ArrayValue).values.get(0) instanceof FloatLiteral ){
@@ -2341,7 +2439,7 @@ class FLYGenerator extends AbstractGenerator {
 					return ''''''
 				
 				}
-		} else{
+		}else{
 			var path = (dec.right as DeclarationObject).features.get(1).value_s
 			if( !(path.contains("https://") || path.contains("http://")) ){ // local 
 				var name_file_ext = path.split("/").last
@@ -2559,7 +2657,7 @@ class FLYGenerator extends AbstractGenerator {
 			}	
 	}
 
-		def generateTerminationQueue(FlyFunctionCall element) {
+		def generateTerminationQueue(FlyFunctionCall element, int func_counter) {
 			var local_env = res.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
 			filter[(right as DeclarationObject).features.get(0).value_s.equals("smp")].get(0)
 			var local = local_env.name
@@ -2568,19 +2666,19 @@ class FLYGenerator extends AbstractGenerator {
 				case "aws":
 					return '''
 						__sqs_«element.environment.name».createQueue(new CreateQueueRequest("termination-«element.target.name»-"+__id_execution));
-						LinkedTransferQueue<String> __termination_«element.target.name»_ch  = new LinkedTransferQueue<String>();
-						final String __termination_«element.target.name»_url = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
+						LinkedTransferQueue<String> __termination_«element.target.name»_ch_«func_counter»  = new LinkedTransferQueue<String>();
+						final String __termination_«element.target.name»_url_«func_counter» = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
 						for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
 							__thread_pool_«local».submit(new Callable<Object>() {
 								@Override
 								public Object call() throws Exception {
-									while(__wait_on_termination_«element.target.name») {
-										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url).
+									while(__wait_on_termination_«element.target.name»_«func_counter») {
+										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url_«func_counter»).
 												withWaitTimeSeconds(1).withMaxNumberOfMessages(10);
 										ReceiveMessageResult __res = __sqs_«element.environment.name».receiveMessage(__recmsg);
 										for(Message msg : __res.getMessages()) { 
-											__termination_«element.target.name»_ch.put(msg.getBody());
-											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url, msg.getReceiptHandle());
+											__termination_«element.target.name»_ch_«func_counter».put(msg.getBody());
+											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url_«func_counter», msg.getReceiptHandle());
 										}
 									}
 									return null;
@@ -2592,18 +2690,18 @@ class FLYGenerator extends AbstractGenerator {
 					return '''
 						__sqs_«element.environment.name».createQueue(new CreateQueueRequest("termination-«element.target.name»-"+__id_execution));
 						LinkedTransferQueue<String> __termination_«element.target.name»_ch  = new LinkedTransferQueue<String>();
-						final String __termination_«element.target.name»_url = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
+						final String __termination_«element.target.name»_url_«func_counter» = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
 						for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
 							__thread_pool_«local».submit(new Callable<Object>() {
 								@Override
 								public Object call() throws Exception {
-									while(__wait_on_termination_«element.target.name») {
-										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url).
+									while(__wait_on_termination_«element.target.name»_«func_counter») {
+										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url_«func_counter»).
 												withWaitTimeSeconds(1).withMaxNumberOfMessages(10);
 										ReceiveMessageResult __res = __sqs_«element.environment.name».receiveMessage(__recmsg);
 										for(Message msg : __res.getMessages()) { 
-											__termination_«element.target.name»_ch.put(msg.getBody());
-											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url, msg.getReceiptHandle());
+											__termination_«element.target.name»_ch_«func_counter».put(msg.getBody());
+											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url_«func_counter», msg.getReceiptHandle());
 										}
 									}
 									return null;
@@ -2614,14 +2712,14 @@ class FLYGenerator extends AbstractGenerator {
 				case "azure":
 					return '''
 						«element.environment.name».createQueue("termination-«element.target.name»-"+__id_execution);
-						LinkedTransferQueue<String> __termination_«element.target.name»_ch  = new LinkedTransferQueue<String>();
+						LinkedTransferQueue<String> __termination_«element.target.name»_ch_«func_counter»  = new LinkedTransferQueue<String>();
 						__thread_pool_«local».submit(new Callable<Object>() {
 							@Override
 							public Object call() throws Exception {
-								while(__wait_on_termination_«element.target.name») {
+								while(__wait_on_termination_«element.target.name»_«func_counter») {
 									List<String> __recMsgs = «element.environment.name».peeksFromQueue("termination-«element.target.name»-"+__id_execution,10);
 									for(String msg : __recMsgs) { 
-										__termination_«element.target.name»_ch.put(msg);
+										__termination_«element.target.name»_ch_«func_counter».put(msg);
 									}
 								}
 								return null;
@@ -2753,10 +2851,8 @@ class FLYGenerator extends AbstractGenerator {
 					return '''(String) «generateArithmeticExpression(expression.target,scope)»'''
 				}
 				if (expression.type.equals("Integer")) {
-		
-					return '''(int)((«generateArithmeticExpression(expression.target,scope)» instanceof Short)? 
-					new Integer((Short) «generateArithmeticExpression(expression.target,scope)»):(«generateArithmeticExpression(expression.target,scope)» instanceof String)?
-					Integer.parseInt((String)«generateArithmeticExpression(expression.target,scope)») :(Integer) «generateArithmeticExpression(expression.target,scope)»)'''
+					
+					return '''Integer.parseInt((String)«generateArithmeticExpression(expression.target,scope)»)'''
 				}
 			
 				if (expression.type.equals("Double")) {
@@ -2772,6 +2868,9 @@ class FLYGenerator extends AbstractGenerator {
 				}
 				if (expression.type.equals("Object")) {
 					return '''((HashMap<Object,Object>) «generateArithmeticExpression(expression.target,scope)»)'''
+				}
+				if (expression.type.equals("Matrix")) {
+					return '''«generateArithmeticExpression(expression.target,scope)»'''
 				}
 			} else { // parsing
 				if (expression.type.equals("Integer")) {
@@ -2840,7 +2939,7 @@ class FLYGenerator extends AbstractGenerator {
 				}
 				s += ");
 						}"
-			} else {
+			}else{
 				var func_name = ((res.allContents.toIterable.filter(VariableDeclaration).filter[it.name==expression.target.name].get(0) as VariableDeclaration).right as FlyFunctionCall).target.name
 				if(expression.feature.equals("wait")){
 					s+='''
@@ -3052,7 +3151,7 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						return s
 					}
-		} else {
+		}else{
 			var s = expression.target.name + "." + expression.feature + "("
 			for (exp : expression.expressions) {
 				s += generateArithmeticExpression(exp, scope)
@@ -3984,7 +4083,6 @@ class FLYGenerator extends AbstractGenerator {
 
 	def generateAWSFlyFunctionCall(FlyFunctionCall call, String scope) {
 		// generate the aws lambda function
-		println("inside here")
 		println(call.input.f_index)
 		var async = call.isIsAsync
 		var cred = call.environment.name
@@ -3992,7 +4090,6 @@ class FLYGenerator extends AbstractGenerator {
 		var function = call.target.name
 		var ret = ''''''
 		if (call.input.isIs_for_index) {
-			println("inside here 2")
 			println(call.input.f_index)
 			
 			ret+='''
@@ -4181,24 +4278,27 @@ class FLYGenerator extends AbstractGenerator {
 							int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«cred»").get("nthread");
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
-							int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+							String matrixType_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
+							matrixType_«func_ID» = matrixType_«func_ID».substring(0, matrixType_«func_ID».indexOf("["));
+										
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-								int __n_rows =  __rows/__num_proc_«call.target.name»_«func_ID»;
-								if(__rows%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows%__num_proc_«call.target.name»_«func_ID» ){
-									__n_rows++;
+								int __n_rows_«func_ID» =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
+								if(__rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» ){
+									__n_rows_«func_ID»++;
 								}
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"values\":[");
-								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows;__j++){
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType_«func_ID»+"\",\"values\":[");
+								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows_«func_ID»;__j++){
 									for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
 									}
-									if(__j == __current_row_«(call.input.f_index as VariableLiteral).variable.name» + __n_rows-1) {
+									if(__j == __current_row_«(call.input.f_index as VariableLiteral).variable.name» + __n_rows_«func_ID»-1) {
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("]}");
 									}
 								}
-								__current_row_«(call.input.f_index as VariableLiteral).variable.name»+=__n_rows;
+								__current_row_«(call.input.f_index as VariableLiteral).variable.name»+=__n_rows_«func_ID»;
 							}
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 									final int __i_f = __i;
@@ -4225,6 +4325,8 @@ class FLYGenerator extends AbstractGenerator {
 								int __current_col_«(call.input.f_index as VariableLiteral).variable.name» = 0;
 								int __cols = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
 								int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+								String matrixType = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
+								matrixType = matrixType.substring(0, matrixType.indexOf("["));
 								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 									int __n_cols =  __cols/__num_proc_«call.target.name»_«func_ID»;
@@ -4232,7 +4334,7 @@ class FLYGenerator extends AbstractGenerator {
 										__n_cols++;
 									}
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"values\":[");
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType+"\",\"values\":[");
 									for(int __j = 0; __j<__rows;__j++){
 										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»+__n_cols;__z++){
 											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
@@ -4284,10 +4386,12 @@ class FLYGenerator extends AbstractGenerator {
 		
 		if(!async){ 
 			ret+='''
-				while(__termination_«call.target.name»_ch.size()!=__num_proc_«call.target.name»_«func_ID»)
-					;
-
-				__wait_on_termination_«call.target.name»=false;
+				int __messagges_«call.target.name»_«func_ID» = 0;
+				while(__messagges_«call.target.name»_«func_ID»!=__num_proc_«call.target.name»_«func_ID») {
+					__termination_«call.target.name»_ch_«func_termination_counter».poll();
+					__messagges_«call.target.name»_«func_ID»++;
+				}
+				__wait_on_termination_«call.target.name»_«func_termination_counter++»=false;
 			'''
 		}
 		// manage the callback
@@ -4478,10 +4582,10 @@ class FLYGenerator extends AbstractGenerator {
 							int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«cred»").get("nthread");
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
-							int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-								int __n_rows =  __rows/__num_proc_«call.target.name»_«func_ID»;
-								if(__rows%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows%__num_proc_«call.target.name»_«func_ID» ){
+								int __n_rows =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
+								if(__rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» ){
 									__n_rows++;
 								}
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
@@ -4575,10 +4679,12 @@ class FLYGenerator extends AbstractGenerator {
 		
 		if(!async){ 
 			ret+='''
-				while(__termination_«call.target.name»_ch.size()!=__num_proc_«call.target.name»_«func_ID»)
-					;
-				
-				__wait_on_termination_«call.target.name»=false;
+				int __messagges_«call.target.name»_«func_ID» = 0;
+				while(__messagges_«call.target.name»_«func_ID»!=__num_proc_«call.target.name»_«func_ID») {
+					__termination_«call.target.name»_ch_«func_termination_counter».poll();
+					__messagges_«call.target.name»_«func_ID»++;
+				}
+				__wait_on_termination_«call.target.name»_«func_termination_counter++»=false;
 			'''
 		}
 		// manage the callback
@@ -4609,6 +4715,7 @@ class FLYGenerator extends AbstractGenerator {
 	def generateChannelSend(ChannelSend send, String scope) {
 		var env = (((send.target.environment.get(0).right as DeclarationObject).features.get(0)) as DeclarationFeature).value_s
 		var env_name = send.target.environment.get(0).name
+		println("test channel send " + send.expression)
 		switch env {
 			case "smp":
 				return '''«(send.target as VariableDeclaration).name».add(«generateArithmeticExpression(send.expression,scope)»)'''
@@ -4721,46 +4828,48 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						__scanner_«name».close();
 					'''
-			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("Directory")){ //TO-DO: add support directory
-				return '''
-				for (String __«(indexes.indices.get(0) as VariableDeclaration).name» : «(object as VariableLiteral).variable.name».list()) {
-					String «(indexes.indices.get(0) as VariableDeclaration).name» = «(object as VariableLiteral).variable.name».getAbsolutePath()+"/"+ __«(indexes.indices.get(0) as VariableDeclaration).name»;
-					«IF body instanceof BlockExpression»
-						«FOR exp : body.expressions »
-								«generateExpression(exp,scope)»
-						«ENDFOR»
-					«ELSE»
-						«generateExpression(body,scope)»
-					«ENDIF»
-				}
-				'''
-			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("String[]")){
-				return '''
-				for (String «(indexes.indices.get(0) as VariableDeclaration).name» : «(object as VariableLiteral).variable.name») {
-					«IF body instanceof BlockExpression»
-						«FOR exp : body.expressions »
-							«generateExpression(exp,scope)»
-						«ENDFOR»
-					«ELSE»
-						«generateExpression(body,scope)»
-					«ENDIF»
-				}
-				'''
-			} else if (typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("Table")){
+			}else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("Directory")){ //TO-DO: add support directory
+					return '''
+						for (String __«(indexes.indices.get(0) as VariableDeclaration).name» : «(object as VariableLiteral).variable.name».list()) {
+							String «(indexes.indices.get(0) as VariableDeclaration).name» = «(object as VariableLiteral).variable.name».getAbsolutePath()+"/"+ __«(indexes.indices.get(0) as VariableDeclaration).name»;
+							«IF body instanceof BlockExpression»
+								«FOR exp : body.expressions »
+									«generateExpression(exp,scope)»
+								«ENDFOR»
+							«ELSE»
+								«generateExpression(body,scope)»
+							«ENDIF»
+						}
+					'''
+				}else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("String[]")){
+					return '''
+						for (String «(indexes.indices.get(0) as VariableDeclaration).name» : «(object as VariableLiteral).variable.name») {
+							«IF body instanceof BlockExpression»
+								«FOR exp : body.expressions »
+									«generateExpression(exp,scope)»
+								«ENDFOR»
+							«ELSE»
+								«generateExpression(body,scope)»
+							«ENDIF»
+						}
+					'''
+				}else if (typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("Table")){
 				var name = (object as VariableLiteral).variable.name;
 				var index_name = (indexes.indices.get(0) as VariableDeclaration).name
 				typeSystem.get(scope).put(index_name,name);
-				return '''
-				for(int _«name»=0; _«name»< «name».rowCount();_«name»++){
-					«IF body instanceof BlockExpression»
-						«FOR exp : body.expressions »
-							«generateExpression(exp,scope)»
-						«ENDFOR»
-					«ELSE»
-						«generateExpression(body,scope)»
-					«ENDIF»
-				}
-				'''
+				
+					return '''
+						for(int _«name»=0; _«name»< «name».rowCount();_«name»++){
+							«IF body instanceof BlockExpression»
+								«FOR exp : body.expressions »
+									«generateExpression(exp,scope)»
+								«ENDFOR»
+							«ELSE»
+								«generateExpression(body,scope)»
+							«ENDIF»
+						}
+					'''
+			
 			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("List <Table>")) {
 				var name = (object as VariableLiteral).variable.name;
 				(indexes.indices.get(0) as VariableDeclaration).typeobject='var'
@@ -4777,14 +4886,16 @@ class FLYGenerator extends AbstractGenerator {
 					«ENDIF»
 				}
 				'''
+								
 			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).contains("Array")){
-				var name = (object as VariableLiteral).variable.name;
-				return '''
-				for(int «(indexes.indices.get(0) as VariableDeclaration).name» = 0;«(indexes.indices.get(0) as VariableDeclaration).name» < «name».length;«(indexes.indices.get(0) as VariableDeclaration).name»++){
-					«generateExpression(body,scope)»
-				}
-				'''
-			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).contains("Matrix")){
+					var name = (object as VariableLiteral).variable.name;
+				
+					return '''
+						for(int «(indexes.indices.get(0) as VariableDeclaration).name» = 0;«(indexes.indices.get(0) as VariableDeclaration).name» < «name».length;«(indexes.indices.get(0) as VariableDeclaration).name»++){
+							«generateExpression(body,scope)»
+						}
+					'''
+			}else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).contains("Matrix")){
 				var name = (object as VariableLiteral).variable.name;
 				var index_row = (indexes.indices.get(0) as VariableDeclaration).name
 				var index_col = (indexes.indices.get(1) as VariableDeclaration).name
@@ -4823,11 +4934,11 @@ class FLYGenerator extends AbstractGenerator {
 
 	def generateIfExpression(IfExpression expression, String scope) {
 		'''
-		if(«generateArithmeticExpression(expression.cond,scope)»)
-			«generateExpression(expression.then,scope)»
-			«IF expression.^else !== null»
-				else «generateExpression(expression.^else,scope)»
-			«ENDIF» 
+			if(«generateArithmeticExpression(expression.cond,scope)»)
+				«generateExpression(expression.then,scope)»
+				«IF expression.^else !== null»
+					else «generateExpression(expression.^else,scope)»
+				«ENDIF» 
 		'''
 	}
 
@@ -4849,7 +4960,7 @@ class FLYGenerator extends AbstractGenerator {
 			if (assignment.value instanceof CastExpression &&
 				((assignment.value as CastExpression).target instanceof ChannelReceive)) {
 				if (!(((assignment.value as CastExpression).target as ChannelReceive).target.environment.
-					get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")) { // aws environment
+					get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")) { // cloud environment
 					if ((assignment.value as CastExpression).type.equals("Integer")) {
 						return '''
 							«generateArithmeticExpression(assignment.feature,scope)» «assignment.op» Integer.parseInt(«((assignment.value as CastExpression).target as ChannelReceive).target.name».take().toString());
@@ -5106,44 +5217,44 @@ class FLYGenerator extends AbstractGenerator {
 			return "Double"
 		} else if (exp instanceof VariableLiteral) {
 			val variable = exp.variable
-		if (variable.typeobject.equals("var")) {
-			if (variable.right instanceof DeclarationObject) {
-				var type = (variable.right as DeclarationObject).features.get(0).value_s
-				switch (type) {
-					case "dataframe": {
-						return "Table"
+			if (variable.typeobject.equals("var") || variable.typeobject.equals("const")) {
+				if (variable.right instanceof DeclarationObject) {
+					var type = (variable.right as DeclarationObject).features.get(0).value_s
+					switch (type) {
+						case "dataframe": {
+							return "Table"
+						}
+						case "channel":{
+							return "channel"
+						}
+						case "random":{
+							return "Random"
+						}
+						case "file":{
+							if((variable.right as DeclarationObject).features.get(1).value_s != null){
+								var path = (variable.right as DeclarationObject).features.get(1).value_s.split("/")
+								var filename = path.get(path.length-1)
+								if (filename.split(".").length != 2)
+									return "String[]"
+								else
+									return "File"
+							}else
+							return "File"
+							
+						}
+						default: {
+							return "variable"
+						}
 					}
-					case "channel":{
-						return "channel"
-					}
-					case "random":{
-						return "Random"
-					}
-					case "file":{
-						if((variable.right as DeclarationObject).features.get(1).value_s != null){
-							var path = (variable.right as DeclarationObject).features.get(1).value_s.split("/")
-							var filename = path.get(path.length-1)
-							if (filename.split(".").length != 2)
-								return "String[]"
-							else
-								return "File"
-						}else
-						return "File"
-						
-					}
-					default: {
-						return "variable"
-					}
+				} else if (variable.right instanceof NameObjectDef) {
+					return "HashMap"
+				} else if (variable.right instanceof ArithmeticExpression) {
+					return valuateArithmeticExpression(variable.right as ArithmeticExpression, scope)
+				}else{
+					return typeSystem.get(scope).get(variable.name) // if it's a parameter of a FunctionDefinition
 				}
-			} else if (variable.right instanceof NameObjectDef) {
-				return "HashMap"
-			} else if (variable.right instanceof ArithmeticExpression) {
-				return valuateArithmeticExpression(variable.right as ArithmeticExpression, scope)
-			}else{
-				return typeSystem.get(scope).get(variable.name) // if it's a parameter of a FunctionDefinition
 			}
-		}
-		return "variable"
+			return "variable"
 		} else if (exp instanceof NameObject) {
 			return typeSystem.get(scope).get(exp.name.name + "." + exp.value)
 		} else if (exp instanceof IndexObject) {
@@ -5260,7 +5371,7 @@ class FLYGenerator extends AbstractGenerator {
 							return "List <Table>"
 						} else {
 							return "long"
-						}							
+						}
 					}
 				} else if (exp.feature.equals("split")) { 
 					return "String[]"
