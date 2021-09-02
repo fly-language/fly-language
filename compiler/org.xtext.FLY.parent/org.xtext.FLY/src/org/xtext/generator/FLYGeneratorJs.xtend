@@ -255,7 +255,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 							__«(exp as VariableDeclaration).name»_matrix = event.data[0]
 							__«(exp as VariableDeclaration).name»_rows = event.data[0].rows;
 							__«(exp as VariableDeclaration).name»_cols = event.data[0].cols;
-							__«(exp as VariableDeclaration).name»_submatrixIndex = event.data[0].submatrixIndex;
+							submatrixIndex = event.data[0].submatrixIndex;
+							matrixType = event.data[0].matrixType;
 							__«(exp as VariableDeclaration).name»_values = event.data[0].values
 							__index = 0
 							«(exp as VariableDeclaration).name» = [];
@@ -284,8 +285,9 @@ class FLYGeneratorJs extends AbstractGenerator {
 
 							var __«(exp as VariableDeclaration).name»_rows = arr_data[0];
 							var __«(exp as VariableDeclaration).name»_cols = arr_data[1];
-							var __«(exp as VariableDeclaration).name»_submatrixIndex = arr_data[2];
-							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[3]);
+							var submatrixIndex = arr_data[2];
+							var matrixType = arr_data[3];
+							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[4]);
 							var arr_values = __«(exp as VariableDeclaration).name»_values.toArray();
 							var __index = 0
 							«(exp as VariableDeclaration).name» = [];
@@ -457,14 +459,33 @@ class FLYGeneratorJs extends AbstractGenerator {
 			«IF env.contains("aws")»
 				__data = await __sqs.getQueueUrl({ QueueName: "«exp.target.name»-'${id}'"}).promise();
 				
-				__params = {
-					MessageBody : JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»),
-					QueueUrl : __data.QueueUrl
-				};
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					__params = {
+						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
+												'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
+												'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
+												'submatrixIndex': submatrixIndex,
+												'matrixType': matrixType}),
+						QueueUrl : __data.QueueUrl
+					};
+				«ELSE»
+					__params = {
+						MessageBody : JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»),
+						QueueUrl : __data.QueueUrl
+					};
+				«ENDIF»
 				
 				__data = await __sqs.sendMessage(__params).promise();
 			«ELSEIF env == "azure"»
-				await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»));
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
+																	'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
+																	'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
+																	'submatrixIndex': submatrixIndex,
+																	'matrixType': matrixType});
+				«ELSE»
+					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»));
+				«ENDIF»
 			«ENDIF»
 			'''
 		} else if (exp instanceof VariableDeclaration) {
@@ -747,7 +768,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 						    }
 						}
 						case "query":{
-						    var connection = (((exp.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration)	
+							var connection = (((exp.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration)	
 						    var databaseType = (connection.right as DeclarationObject).features.get(0).value_s
 						    if(databaseType.equals("sql")) {
 						        return '''
@@ -937,7 +958,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 						            let features = [];
 						            let objects = [];
 						        '''
-						        
+
 						        for(i : 3 ..< (exp.right as DeclarationObject).features.size)
 						        ret += '''
 						        
@@ -965,9 +986,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 						                
 						            });
 						        '''
-						        
-						        ret += '''
 
+						        ret += '''
 						            let tables = [];
 						                
 						            for(i = 0; i < features.length; ++i)
@@ -978,11 +998,10 @@ class FLYGeneratorJs extends AbstractGenerator {
 						            
 						            return tables;
 						        }
-
 						        '''
-						            
+
 						        return ret;
-						                                            
+
 						    } else if(query_type.equals("insert")) {
 						        if(((exp.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.nullOrEmpty) {
 						            if((((exp.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration).right instanceof DeclarationObject) {
@@ -1023,7 +1042,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 						                    }
 						                    
 						                    '''
-						                    
+
 						                    return ret;
 						                }
 						            } else {
@@ -1067,13 +1086,13 @@ class FLYGeneratorJs extends AbstractGenerator {
 						            
 						            let count = 0;
 						            '''
-						            
+
 						        for(i : 3 ..< (exp.right as DeclarationObject).features.size)			
 						            ret += '''
 						            
 						                count += (await «(exp.right as DeclarationObject).features.get(i).value_f.name».deleteMany(«exp.name»Delete)).deletedCount;
 						            '''
-						            
+
 						        ret += '''
 						            
 						            return new Promise((resolve, reject) => {
@@ -1082,7 +1101,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 						            
 						        }
 						        '''
-						        
+
 						        return ret
 						    }
 						}
@@ -1179,7 +1198,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 		var i=0;
 		var lines = expression.code.split("\n");
 		var num_tabs = 0 
-		while(lines.get(1).charAt(i).equals(lines.get(1).charAt(0))){
+		while(lines.get(1).charAt(i).equals('\t')){
 			num_tabs++; 
 			i++;
 		}
@@ -1254,18 +1273,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 						«(assignment.feature_obj as IndexObject).name.name»[«generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(0).value,scope)»] = «generateJsArithmeticExpression(assignment.value,scope)»
 					'''
 				} else if(typeSystem.get(scope).get((assignment.feature_obj as IndexObject).name.name).contains("Matrix")){
-					if((assignment.feature_obj as IndexObject).indexes.length==2){
-						var i = generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(0).value,scope)
-						var j = generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(1).value,scope)
-						var col = typeSystem.get(scope).get((assignment.feature_obj as IndexObject).name.name).split("_").get(2)
-						return '''
-							«(assignment.feature_obj as IndexObject).name.name»[(«i»*«col»)+«j»] = «generateJsArithmeticExpression(assignment.value,scope)»
-						'''
-					}else {
-						return '''
-							«(assignment.feature_obj as IndexObject).name.name»[«generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(0).value,scope)»,«generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(1).value,scope)»,«generateJsArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(2).value,scope)»] = «generateJsArithmeticExpression(assignment.value,scope)»
-						'''
-					}
+					return '''«generateJsArithmeticExpression(assignment.feature_obj,scope)» =  «generateJsArithmeticExpression(assignment.value,scope)»'''
 				}else{
 					typeSystem.get(scope).put(
 						((assignment.feature_obj as IndexObject).name as VariableDeclaration).name + "[" +
@@ -1373,7 +1381,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 							«ENDIF»
 						}
 					'''
-				} else {
+				}else{
 					return ''''''
 				}
 			} else if(typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("List <Table>")) {
@@ -1389,9 +1397,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 			            «generateJsExpression(exp.body,scope)»
 			        «ENDIF»
 			    }
-
 			    '''
-			} else if (typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("File")) {
+			}else if (typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("File")) {
 					return '''
 						const __«(exp.index.indices.get(0) as VariableDeclaration).name» = readline.createInterface({
 							input: «(exp.object as VariableLiteral).variable.name».readableStreamBody,
@@ -1700,7 +1707,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 			
 			switch (type){
 				case "query":{
-				    var queryType = (expression.target.right as DeclarationObject).features.get(1).value_s
+					var queryType = (expression.target.right as DeclarationObject).features.get(1).value_s
 				    if(expression.feature.equals("execute")){
 				        var connection = (expression.target.right as DeclarationObject).features.get(2).value_f.name
 				        var databaseType = ((((expression.target.right as DeclarationObject).features.get(2) as DeclarationFeature)
@@ -1782,7 +1789,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 				                        await «((expression.target.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name».insertMany((await «expression.target.name»()));
 				                        '''
 				                    ret += '''
-
 				                    '''
 				                    return ret
 				                } else {
@@ -1792,7 +1798,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 				                        await «((expression.target.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name».insertMany(«expression.target.name»);
 				                        '''
 				                    ret += '''
-
 				                    '''
 				                    return ret
 				                }
@@ -1803,7 +1808,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 				                    await «((expression.target.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name».insertMany(«expression.target.name»);
 				                    '''
 				                ret += '''
-
 				                '''
 				                return ret
 				            }
@@ -1819,7 +1823,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 				                (await «((expression.target.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name».updateMany(«expression.target.name»Filter, «expression.target.name»));
 				                '''
 				            ret += '''
-
 				            '''
 				            return ret
 				        } else if(queryType.equals("replace")) {
@@ -1829,7 +1832,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 				                (await «((expression.target.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name».replaceOne(«expression.target.name»Filter, «expression.target.name»));
 				                '''
 				            ret += '''
-
 				            '''
 				            return ret							
 				        } else if(queryType.equals("delete")) {
@@ -1839,7 +1841,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 				            '''
 				        }
 				    }
-				}						
+				}					
 				default :{
 					return generateJsArithmeticExpression(expression, scope)
 				}
@@ -2043,7 +2045,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 		    echo "npm install mongodb failed"
 		    exit 1
 		fi
-				
+
 		echo "npm install csv-parse"
 		npm install csv-parse
 		if [ $? -eq 0 ]; then
@@ -2052,7 +2054,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 		    echo "npm install csv-parse failed"
 		    exit 1
 		fi
-				
+
 		echo "npm install fs"
 		npm install fs
 		if [ $? -eq 0 ]; then
@@ -2061,6 +2063,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 		    echo "npm install fs failed"
 		    exit 1
 		fi
+		
 	«FOR req : resource.allContents.toIterable.filter(RequireExpression).filter[(environment.right as DeclarationObject).features.get(4).value_s.equals(language)]»
 		echo "npm install «req.lib»"
 		npm install «req.lib»"
@@ -2344,6 +2347,33 @@ class FLYGeneratorJs extends AbstractGenerator {
 			echo "npm install qs failed"
 			exit 1
 		fi
+
+		echo "npm install mongodb@3.6.3"
+		npm install mongodb@3.6.3
+		if [ $? -eq 0 ]; then
+		    echo "..."
+		else
+		    echo "npm install mongodb failed"
+		    exit 1
+		fi
+
+		echo "npm install csv-parse"
+		npm install csv-parse
+		if [ $? -eq 0 ]; then
+		    echo "..."
+		else
+		    echo "npm install csv-parse failed"
+		    exit 1
+		fi
+
+		echo "npm install fs"
+		npm install fs
+		if [ $? -eq 0 ]; then
+		    echo "..."
+		else
+		    echo "npm install fs failed"
+		    exit 1
+		fi
 		
 		«FOR req : resource.allContents.toIterable.filter(RequireExpression).filter[(environment.right as DeclarationObject).features.get(4).value_s.equals(language)]»
 			echo "npm install «req.lib»"
@@ -2501,7 +2531,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 
 			rm -f package.json
 			echo '{
-			    "name": "'${function}'",
+				"name": "'${function}'",
 			    "version": "1.0.0",
 			    "main": "index.js",
 			    "dependencies": {
