@@ -4386,9 +4386,11 @@ class FLYGenerator extends AbstractGenerator {
 		
 		if(!async){ 
 			ret+='''				
-				while(__termination_«call.target.name»_ch_«func_termination_counter».size()!=__num_proc_«call.target.name»_«func_ID»)
-					;
-          
+				int __messagges_«call.target.name»_«func_ID» = 0;
+				while(__messagges_«call.target.name»_«func_ID»!=__num_proc_«call.target.name»_«func_ID») {
+					__termination_«call.target.name»_ch_«func_termination_counter».poll();
+					__messagges_«call.target.name»_«func_ID»++;
+				}
 				__wait_on_termination_«call.target.name»_«func_termination_counter++»=false;
 			'''
 		}
@@ -4677,9 +4679,11 @@ class FLYGenerator extends AbstractGenerator {
 		
 		if(!async){ 
 			ret+='''
-				while(__termination_«call.target.name»_ch_«func_termination_counter».size()!=__num_proc_«call.target.name»_«func_ID»)
-					;
-				
+				int __messagges_«call.target.name»_«func_ID» = 0;
+				while(__messagges_«call.target.name»_«func_ID»!=__num_proc_«call.target.name»_«func_ID») {
+					__termination_«call.target.name»_ch_«func_termination_counter».poll();
+					__messagges_«call.target.name»_«func_ID»++;
+				}
 				__wait_on_termination_«call.target.name»_«func_termination_counter++»=false;
 			'''
 		}
