@@ -2167,21 +2167,21 @@ class FLYGenerator extends AbstractGenerator {
 									String[] items = extractedItems.split(",");	  
 																				
 									Object [][] «dec.name» = new Object[n_rows][n_cols];
-									if(matrixType.equals("Double")){
+									if(matrixType.equals("float") || matrixType.equals("number")){
 										int itemCount = 0;
 										for (int j=0; j < n_rows; j++) {
 											for(int k=0; k< n_cols; k++) {
 												«dec.name»[j][k] = Double.parseDouble(items[itemCount++]);
 											}
 										}
-									}else if (matrixType.equals("Integer")){
+									}else if (matrixType.equals("int")){
 										int itemCount = 0;
 										for (int j=0; j < n_rows; j++) {
 											for(int k=0; k< n_cols; k++) {
 												«dec.name»[j][k] = Integer.parseInt(items[itemCount++]);
-											}
+											} 
 										}
-									}else {
+									}else if (matrixType.equals("str") || matrixType.equals("string")){
 										//it is a string
 										int itemCount = 0;
 										for (int j=0; j < n_rows; j++) {
@@ -4279,8 +4279,6 @@ class FLYGenerator extends AbstractGenerator {
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
 							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
-							String matrixType_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
-							matrixType_«func_ID» = matrixType_«func_ID».substring(0, matrixType_«func_ID».indexOf("["));
 										
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 								int __n_rows_«func_ID» =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
@@ -4288,7 +4286,7 @@ class FLYGenerator extends AbstractGenerator {
 									__n_rows_«func_ID»++;
 								}
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType_«func_ID»+"\",\"values\":[");
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"values\":[");
 								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows_«func_ID»;__j++){
 									for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
@@ -4325,8 +4323,6 @@ class FLYGenerator extends AbstractGenerator {
 								int __current_col_«(call.input.f_index as VariableLiteral).variable.name» = 0;
 								int __cols = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
 								int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
-								String matrixType = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
-								matrixType = matrixType.substring(0, matrixType.indexOf("["));
 								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 									int __n_cols =  __cols/__num_proc_«call.target.name»_«func_ID»;
@@ -4334,7 +4330,7 @@ class FLYGenerator extends AbstractGenerator {
 										__n_cols++;
 									}
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType+"\",\"values\":[");
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"values\":[");
 									for(int __j = 0; __j<__rows;__j++){
 										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»+__n_cols;__z++){
 											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");

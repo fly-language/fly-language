@@ -320,7 +320,6 @@ class FLYGeneratorPython extends AbstractGenerator {
 						__«(exp as VariableDeclaration).name»_rows = data[0]['rows']
 						__«(exp as VariableDeclaration).name»_cols = data[0]['cols']
 						submatrixIndex = data[0]['submatrixIndex']
-						matrixType = data[0]['matrixType']
 						__«(exp as VariableDeclaration).name»_values = data[0]['values']
 						__index = 0
 						«(exp as VariableDeclaration).name» = [[0 for x in range(__«(exp as VariableDeclaration).name»_cols)] for y in range(__«(exp as VariableDeclaration).name»_rows)]
@@ -360,7 +359,7 @@ class FLYGeneratorPython extends AbstractGenerator {
 						'rows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
 						'cols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
 						'submatrixIndex': submatrixIndex,
-						'matrixType': matrixType})
+						'matrixType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0][0].__class__.__name__})
 					)
 				«ELSE»
 					«exp.target.name».send_message(
@@ -374,7 +373,7 @@ class FLYGeneratorPython extends AbstractGenerator {
 											'rows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
 											'cols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
 											'submatrixIndex': submatrixIndex,
-											'matrixType': matrixType})
+											'matrixType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0][0].__class__.__name__})
 										)
 				«ELSE»
 					__queue_service_client.send_message(«generatePyArithmeticExpression(exp.expression, scope, local)»)

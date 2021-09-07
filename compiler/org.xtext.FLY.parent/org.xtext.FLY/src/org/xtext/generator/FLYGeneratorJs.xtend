@@ -256,7 +256,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 							__«(exp as VariableDeclaration).name»_rows = event.data[0].rows;
 							__«(exp as VariableDeclaration).name»_cols = event.data[0].cols;
 							submatrixIndex = event.data[0].submatrixIndex;
-							matrixType = event.data[0].matrixType;
 							__«(exp as VariableDeclaration).name»_values = event.data[0].values
 							__index = 0
 							«(exp as VariableDeclaration).name» = [];
@@ -286,7 +285,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 							var __«(exp as VariableDeclaration).name»_rows = arr_data[0];
 							var __«(exp as VariableDeclaration).name»_cols = arr_data[1];
 							var submatrixIndex = arr_data[2];
-							var matrixType = arr_data[3];
 							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[4]);
 							var arr_values = __«(exp as VariableDeclaration).name»_values.toArray();
 							var __index = 0
@@ -476,7 +474,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 												'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
 												'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
 												'submatrixIndex': submatrixIndex,
-												'matrixType': matrixType}),
+												'matrixType': typeof «generateJsArithmeticExpression(exp.expression,scope)»[0][0]}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSE»
@@ -493,7 +491,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 																	'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
 																	'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
 																	'submatrixIndex': submatrixIndex,
-																	'matrixType': matrixType});
+																	'matrixType': typeof «generateJsArithmeticExpression(exp.expression,scope)»[0][0]});
 				«ELSE»
 					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»));
 				«ENDIF»
