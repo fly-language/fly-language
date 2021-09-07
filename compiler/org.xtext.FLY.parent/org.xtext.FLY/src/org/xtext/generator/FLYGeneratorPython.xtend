@@ -55,6 +55,7 @@ import org.xtext.fLY.DeclarationFeature
 import org.eclipse.xtext.service.AllRulesCache.AllRulesCacheAdapter
 import org.xtext.fLY.ArrayInit
 import org.xtext.fLY.ArrayValue
+import org.xtext.fLY.ConstantDeclaration
 
 class FLYGeneratorPython extends AbstractGenerator {
 	String name = null
@@ -281,6 +282,10 @@ class FLYGeneratorPython extends AbstractGenerator {
 			import azure.functions as func
 			from azure.storage.queue import QueueServiceClient
 			«ENDIF»
+						
+			«FOR exp : resourceInput.allContents.toIterable.filter(ConstantDeclaration)»
+				«generatePyExpression(exp,name,local)»
+			«ENDFOR»
 			
 			«IF env.contains("aws") »			
 			def handler(event,context):
@@ -396,12 +401,13 @@ class FLYGeneratorPython extends AbstractGenerator {
 					if((exp.right as ArrayDefinition).indexes.length==1){
 						var len = (exp.right as ArrayDefinition).indexes.get(0).value
 						typeSystem.get(scope).put(exp.name, "Array_"+type)
-						s += '''«exp.name» = [None] * «generatePyArithmeticExpression(len, scope, local)»'''
+						s += '''«exp.name» = [None] * «generatePyArithmeticExpression(len, scope, local)»'''						
 					}else if((exp.right as ArrayDefinition).indexes.length==2){
 						var row = (exp.right as ArrayDefinition).indexes.get(0).value
 						var col = (exp.right as ArrayDefinition).indexes.get(1).value
 						typeSystem.get(scope).put(exp.name, "Matrix_"+type+"_"+generatePyArithmeticExpression(col, scope, local))
-						s += '''«exp.name» = [None] * («generatePyArithmeticExpression(row, scope, local)»* «generatePyArithmeticExpression(col, scope, local)»)'''
+						s += '''«exp.name» = [[0 for x in range(«generatePyArithmeticExpression(col, scope, local)»)] for y in range(«generatePyArithmeticExpression(row, scope, local)»)]'''
+						
 					}else if((exp.right as ArrayDefinition).indexes.length==3){
 						var row = (exp.right as ArrayDefinition).indexes.get(0).value
 						var col = (exp.right as ArrayDefinition).indexes.get(1).value

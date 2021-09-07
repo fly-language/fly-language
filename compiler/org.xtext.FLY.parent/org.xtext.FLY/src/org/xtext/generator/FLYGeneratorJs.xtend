@@ -358,17 +358,28 @@ class FLYGeneratorJs extends AbstractGenerator {
 			var type_decl =(exp.right as ArrayDefinition).type
 			if((exp.right as ArrayDefinition).indexes.length==1){ //mono-dimensional
 				typeSystem.get(scope).put(exp.name, "Array_"+type_decl)
+				s+='''
+					const «exp.name» = [];
+				'''		
 			}else if((exp.right as ArrayDefinition).indexes.length==2){ //bi-dimensional
 				var col = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(1).value,scope)
 				typeSystem.get(scope).put(exp.name, "Matrix_"+type_decl+"_"+col)
+				s+='''
+					const «exp.name» = [];
+					for(var i_«exp.name»=0; i_«exp.name»<«col»; i_«exp.name»++) {
+					    «exp.name»[i_«exp.name»] = [];
+					    for(var j_«exp.name»=0; j_«exp.name»<«col»; j_«exp.name»++) {
+					        «exp.name»[i_«exp.name»][j_«exp.name»] = undefined;
+					    }
+					}
+				'''	
 			}else if((exp.right as ArrayDefinition).indexes.length==3){ // three-dimentional
 			var col = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(1).value,scope)
 			var dep = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(2).value,scope)
 				typeSystem.get(scope).put(exp.name, "Matrix_"+type_decl+"_"+col+"_"+dep)
+				//TO DO
 			}
-			s+='''
-				const «exp.name» = [];
-			'''					
+			
 		} else if(exp.right instanceof ArrayInit){
 			if(((exp.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
 					((exp.right as ArrayInit).values.get(0) instanceof StringLiteral) ||
@@ -509,17 +520,27 @@ class FLYGeneratorJs extends AbstractGenerator {
 					var type_decl =(exp.right as ArrayDefinition).type
 					if((exp.right as ArrayDefinition).indexes.length==1){ //mono-dimensional
 						typeSystem.get(scope).put(exp.name, "Array_"+type_decl)
+						s+='''
+							var «exp.name» = [];
+						'''	
 					}else if((exp.right as ArrayDefinition).indexes.length==2){ //bi-dimensional
 						var col = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(1).value,scope)
 						typeSystem.get(scope).put(exp.name, "Matrix_"+type_decl+"_"+col)
+						s+='''
+							var «exp.name» = [];
+							for(var i_«exp.name»=0; i_«exp.name»<«col»; i_«exp.name»++) {
+							    «exp.name»[i_«exp.name»] = [];
+							    for(var j_«exp.name»=0; j_«exp.name»<«col»; j_«exp.name»++) {
+							        «exp.name»[i_«exp.name»][j_«exp.name»] = undefined;
+							    }
+							}
+						'''	
 					}else if((exp.right as ArrayDefinition).indexes.length==3){ // three-dimentional
 					var col = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(1).value,scope)
 					var dep = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(2).value,scope)
 						typeSystem.get(scope).put(exp.name, "Matrix_"+type_decl+"_"+col+"_"+dep)
-					}
-					s+='''
-						var «exp.name» = [];
-					'''					
+						//TO DO
+					}				
 				}else if(exp.right instanceof ArrayInit){
 						if(((exp.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
 					((exp.right as ArrayInit).values.get(0) instanceof StringLiteral) ||

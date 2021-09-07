@@ -1471,32 +1471,32 @@ class FLYGenerator extends AbstractGenerator {
 				return s
 			} else if(dec.right instanceof ArrayDefinition){
 				var type_decl = (dec.right as ArrayDefinition).type
-				var real_type = ""
+				/*var real_type = ""
 				if(type_decl.equals("Integer")){
 					real_type = "int"
 				}else if(type_decl.equals("Double")){
 					real_type = "double"
 				}else if(type_decl.equals("String")){
 					real_type = "String"
-				}
+				}*/
 				if((dec.right as ArrayDefinition).indexes.length==1){ //mono-dimensional
 					typeSystem.get(scope).put(dec.name, "Array_"+type_decl)
 					var array_len = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(0).value,scope)
-					var s = '''«real_type»[] «dec.name» = new «real_type»[«array_len»];'''
+					var s = '''«type_decl»[] «dec.name» = new «type_decl»[«array_len»];'''
 					return s
 				} else if((dec.right as ArrayDefinition).indexes.length==2){ //bi-dimensional
 					var row = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(0).value,scope)
 					var col = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(1).value,scope)
 					typeSystem.get(scope).put(dec.name, "Matrix_"+type_decl+"_"+col)
 					
-					var s = '''«real_type»[][] «dec.name» = new «real_type»[«row»][«col»];'''
+					var s = '''«type_decl»[][] «dec.name» = new «type_decl»[«row»][«col»];'''
 					return s
 				} else if ((dec.right as ArrayDefinition).indexes.length==3) { //three-dimensional
 					var row = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(0).value,scope)
 					var col = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(1).value,scope)
 					var dep = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(2).value,scope)
 					typeSystem.get(scope).put(dec.name, "Matrix_"+type_decl+"_"+col+"_"+dep)
-					var s = '''«real_type»[][][] «dec.name» = new «real_type»[«row»][«col»][«dep»];'''
+					var s = '''«type_decl»[][][] «dec.name» = new «type_decl»[«row»][«col»][«dep»];'''
 					return s
 				}
 				
@@ -1755,32 +1755,32 @@ class FLYGenerator extends AbstractGenerator {
 				return s			
 		} else if(dec.right instanceof ArrayDefinition){
 			var type_decl = (dec.right as ArrayDefinition).type
-				var real_type = ""
+				/*var real_type = ""
 				if(type_decl.equals("Integer")){
 					real_type = "int"
 				}else if(type_decl.equals("Double")){
 					real_type = "double"
 				}else if(type_decl.equals("String")){
 					real_type = "String"
-				}
+				}*/
 				if((dec.right as ArrayDefinition).indexes.length==1){ //mono-dimensional
 					typeSystem.get(scope).put(dec.name, "Array_"+type_decl)
 					var array_len = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(0).value,scope)
-					var s = '''static «real_type»[] «dec.name» = new «real_type»[«array_len»];'''
+					var s = '''static «type_decl»[] «dec.name» = new «type_decl»[«array_len»];'''
 					return s
 				} else if((dec.right as ArrayDefinition).indexes.length==2){ //bi-dimensional
 					var row = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(0).value,scope)
 					var col = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(1).value,scope)
 					typeSystem.get(scope).put(dec.name, "Matrix_"+type_decl+"_"+col)
 					
-					var s = '''static «real_type»[][] «dec.name» = new «real_type»[«row»][«col»];'''
+					var s = '''static «type_decl»[][] «dec.name» = new «type_decl»[«row»][«col»];'''
 					return s
 				} else if ((dec.right as ArrayDefinition).indexes.length==3) { //three-dimensional
 					var row = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(0).value,scope)
 					var col = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(1).value,scope)
 					var dep = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(2).value,scope)
 					typeSystem.get(scope).put(dec.name, "Matrix_"+type_decl+"_"+col+"_"+dep)
-					var s = '''static «real_type»[][][] «dec.name» = new «real_type»[«row»][«col»][«dep»];'''
+					var s = '''static «type_decl»[][][] «dec.name» = new «type_decl»[«row»][«col»][«dep»];'''
 					return s
 				}
 		}else if(dec.right instanceof ArrayInit){
