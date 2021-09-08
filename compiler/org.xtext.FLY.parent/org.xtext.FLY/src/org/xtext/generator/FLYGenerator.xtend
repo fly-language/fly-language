@@ -3112,6 +3112,12 @@ class FLYGenerator extends AbstractGenerator {
 							s += ";"
 						}
 						return s
+					} else if (expression.feature.equals("numCols")){
+						var s = expression.target.name + "[0].length"
+						if (t) {
+							s += ";"
+						}
+						return s
 					} else {
 						var s = expression.target.name + "." + expression.feature + "("
 						for (exp : expression.expressions) {
@@ -3128,11 +3134,23 @@ class FLYGenerator extends AbstractGenerator {
 					}	
 				}
 				
-		} else if (expression.target instanceof VariableDeclaration &&
+		} else if ( (expression.target instanceof VariableDeclaration &&
 				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Array")
-					|| typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Matrix"))) { //Array or Matrix variable
+					|| typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Matrix")) ) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Array")
+					|| typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Matrix")) )
+					
+					) { //Array or Matrix variable
+					
 					if(expression.feature.equals("length")){
 						var s = expression.target.name + "." + expression.feature
+						if (t) {
+							s += ";"
+						}
+						return s
+					} else if (expression.feature.equals("numCols")){
+						var s = expression.target.name + "[0].length"
 						if (t) {
 							s += ";"
 						}
@@ -5331,7 +5349,7 @@ class FLYGenerator extends AbstractGenerator {
 		} else if (exp instanceof TimeFunction){
 			return "Long"
 		}else if (exp instanceof VariableFunction) {
-			if (exp.target.typeobject.equals("var")) {
+			if (exp.target.typeobject.equals("var") || exp.target.typeobject.equals("const")) {
 				if (exp.target.right instanceof DeclarationObject){
 					var type = (exp.target.right as DeclarationObject).features.get(0).value_s
 					if (type.equals("random")){
@@ -5371,7 +5389,7 @@ class FLYGenerator extends AbstractGenerator {
 					}
 				} else if (exp.feature.equals("split")) { 
 					return "String[]"
-				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length")) {
+				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length") || exp.feature.equals("numCols")) {
 					return "Integer"
 				} else if (exp.feature.equals("concat") || exp.feature.equals("substring")||
 					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase")) {
