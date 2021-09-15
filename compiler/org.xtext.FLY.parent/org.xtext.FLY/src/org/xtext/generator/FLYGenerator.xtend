@@ -2780,7 +2780,13 @@ class FLYGenerator extends AbstractGenerator {
 				else
 					return '''Arrays.copyOfRange(«expression.name.name», «generateArithmeticExpression(expression.indexes.get(0).value,scope)», «generateArithmeticExpression(expression.indexes.get(0).value2,scope)»)'''
 			} else if(typeSystem.get(scope).get(expression.name.name).contains("Matrix")){
-				if(expression.indexes.length==2){
+				if(expression.indexes.length==1){
+					if(expression.indexes.get(0).value2 === null){
+						return '''«expression.name.name»[«generateArithmeticExpression(expression.indexes.get(0).value,scope)»]'''
+					}else {
+						return ''''''
+					}
+				}else if(expression.indexes.length==2){
 					if(expression.indexes.get(0).value2 === null && expression.indexes.get(1).value2 === null ){
 						return '''«expression.name.name»[«generateArithmeticExpression(expression.indexes.get(0).value,scope)»][«generateArithmeticExpression(expression.indexes.get(1).value,scope)»]'''
 					}else {
@@ -3079,13 +3085,19 @@ class FLYGenerator extends AbstractGenerator {
 				}
 			}
 		}else if (expression.target.right instanceof ArrayInit ){
-					
+								
 			if(((expression.target.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
 					((expression.target.right as ArrayInit).values.get(0) instanceof StringLiteral) ||
 					((expression.target.right as ArrayInit).values.get(0) instanceof FloatLiteral)
 				){ //array mono-dimensional	
 					if(expression.feature.equals("length")){
 						var s = expression.target.name + "." + expression.feature
+						if (t) {
+							s += ";"
+						}
+						return s
+					} else if (expression.feature.equals("deepToString")){ //array to string
+						var s = "Arrays." + expression.feature + "(" + expression.target.name + ")"
 						if (t) {
 							s += ";"
 						}
@@ -3106,14 +3118,20 @@ class FLYGenerator extends AbstractGenerator {
 					}
 
 				} else if ((expression.target.right as ArrayInit).values.get(0) instanceof ArrayValue){ //matrix 2d
-					if(expression.feature.equals("length")){ //num of rows
-						var s = expression.target.name + "." + expression.feature
+					if(expression.feature.equals("rowCount")){ //num of rows
+						var s = expression.target.name + ".length"
 						if (t) {
 							s += ";"
 						}
 						return s
-					} else if (expression.feature.equals("numCols")){
+					} else if (expression.feature.equals("colCount")){ //num of cols
 						var s = expression.target.name + "[0].length"
+						if (t) {
+							s += ";"
+						}
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = "Arrays." + expression.feature + "(" + expression.target.name + ")"
 						if (t) {
 							s += ";"
 						}
@@ -3135,13 +3153,10 @@ class FLYGenerator extends AbstractGenerator {
 				}
 				
 		} else if ( (expression.target instanceof VariableDeclaration &&
-				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Array")
-					|| typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Matrix")) ) ||
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Array"))) ||
 					(expression.target instanceof ConstantDeclaration &&
-				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Array")
-					|| typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Matrix")) )
-					
-					) { //Array or Matrix variable
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Array")))
+					) { //Array variable					
 					
 					if(expression.feature.equals("length")){
 						var s = expression.target.name + "." + expression.feature
@@ -3149,8 +3164,8 @@ class FLYGenerator extends AbstractGenerator {
 							s += ";"
 						}
 						return s
-					} else if (expression.feature.equals("numCols")){
-						var s = expression.target.name + "[0].length"
+					} else if (expression.feature.equals("deepToString")){ //array to string
+						var s = "Arrays." + expression.feature + "(" + expression.target.name + ")"
 						if (t) {
 							s += ";"
 						}
@@ -3169,6 +3184,66 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						return s
 					}
+		} else if ( (expression.target instanceof VariableDeclaration &&
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Matrix"))) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Matrix")))
+					) { //Matrix variable
+					if(expression.feature.equals("rowCount")){
+						var s = expression.target.name + ".length"
+						if (t) {
+							s += ";"
+						}
+						return s
+					} else if (expression.feature.equals("numCols")){
+						var s = expression.target.name + "[0].length"
+						if (t) {
+							s += ";"
+						}
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = "Arrays." + expression.feature + "(" + expression.target.name + ")"
+						if (t) {
+							s += ";"
+						}
+						return s
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						if (t) {
+							s += ";"
+						}
+						return s
+					}
+		} else if (expression.target.right instanceof IndexObject) {
+
+					if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = "Arrays." + expression.feature + "(" + expression.target.name + ")"
+						if (t) {
+							s += ";"
+						}
+						return s
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						if (t) {
+							s += ";"
+						}
+						return s
+					}
+
 		}else{
 			var s = expression.target.name + "." + expression.feature + "("
 			for (exp : expression.expressions) {
@@ -5288,7 +5363,17 @@ class FLYGenerator extends AbstractGenerator {
 				
 			}else if(typeSystem.get(scope).get(exp.name.name).contains("Matrix")){
 				var type = typeSystem.get(scope).get(exp.name.name).split('_')
-				return type.get(1)
+				if(exp.indexes.length == 1){
+					if(type.get(1).equals("Integer")){
+						return "Integer[]"
+					}else if(type.get(1).equals("Double")){
+						return "Double[]"
+					}else if(type.get(1).equals("String")){
+						return "String[]"
+					}
+				}else {
+					return type.get(1)
+				}
 			} else {
 				return typeSystem.get(scope).get(exp.name.name + "[" + generateArithmeticExpression(exp.indexes.get(0).value,scope) + "]")
 			}
@@ -5389,7 +5474,7 @@ class FLYGenerator extends AbstractGenerator {
 					}
 				} else if (exp.feature.equals("split")) { 
 					return "String[]"
-				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length") || exp.feature.equals("numCols")) {
+				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length") || exp.feature.equals("rowCount") || exp.feature.equals("colCount")) {
 					return "Integer"
 				} else if (exp.feature.equals("concat") || exp.feature.equals("substring")||
 					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase")) {
