@@ -62,7 +62,17 @@ class FLYGeneratorJs extends AbstractGenerator {
 	String language = ""
 	int memory = 0
 	int nthread = 0
+	int timeout = 0
 	int time = 0
+	var right_env = ""
+	
+	/*KUBERNETES ENVS*/
+	int nreplicas = 0
+	int nparallels = 0
+	String registryName = ""
+	String resourceGroup = ""
+	String clusterName = ""
+	/*END*/
 	FunctionDefinition root = null
 	HashMap<String, FunctionDefinition> functionCalled = null
 	Resource resourceInput
@@ -71,29 +81,60 @@ class FLYGeneratorJs extends AbstractGenerator {
 	var user = ""
 	HashMap<String, HashMap<String, String>> typeSystem = null
 	boolean isLocal;
+	boolean isCluster
 	boolean isAsync;
-	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure"));
+	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure","k8s"));
 	
 	
 	def generateJS(Resource input, IFileSystemAccess2 fsa, IGeneratorContext context,String name_file, FunctionDefinition func, 
-		VariableDeclaration environment, HashMap<String, HashMap<String, String>> scoping, long id,boolean local,boolean async){
+		VariableDeclaration environment, HashMap<String, HashMap<String, String>> scoping, long id,boolean local,boolean async, boolean cluster){
 		this.name=name_file
 		this.root = func
 		this.typeSystem=scoping
 		this.resourceInput = input
 		this.id_execution = id
 		this.env_name = environment.name
-		if(!local){
-			this.env = (environment.right as DeclarationObject).features.get(0).value_s
-			this.user = (environment.right as DeclarationObject).features.get(1).value_s
-			this.language = (environment.right as DeclarationObject).features.get(5).value_s
-			this.nthread = (environment.right as DeclarationObject).features.get(6).value_t
-			this.memory = (environment.right as DeclarationObject).features.get(7).value_t
-			this.time = (environment.right as DeclarationObject).features.get(8).value_t
-		}else{
-			this.env="smp"
-			this.nthread = (environment.right as DeclarationObject).features.get(1).value_t
-			this.language = (environment.right as DeclarationObject).features.get(2).value_s
+		
+		env = (environment.right as DeclarationObject).features.get(0).value_s
+		
+		if (!local && !cluster) {
+			env = (environment.right as DeclarationObject).features.get(0).value_s
+			user = (environment.right as DeclarationObject).features.get(1).value_s
+			language = (environment.right as DeclarationObject).features.get(5).value_s
+			nthread = (environment.right as DeclarationObject).features.get(6).value_t
+			memory = (environment.right as DeclarationObject).features.get(7).value_t
+			timeout = (environment.right as DeclarationObject).features.get(8).value_t					
+		} 
+		if(env == "k8s"){
+			env = (environment.right as DeclarationObject).features.get(0).value_s
+			right_env = ((environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s
+			resourceGroup = (environment.right as DeclarationObject).features.get(1).value_s
+			clusterName = (environment.right as DeclarationObject).features.get(2).value_s
+			registryName = (environment.right as DeclarationObject).features.get(3).value_s
+			switch (right_env){
+				case "azure":
+				{
+				 nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(7) as DeclarationFeature).value_t
+				 nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(7) as DeclarationFeature).value_t
+				}
+				case "smp":
+				{
+				language = (environment.right as DeclarationObject).features.get(1).value_s
+				 nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(2) as DeclarationFeature).value_t
+				 nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(2) as DeclarationFeature).value_t
+				}
+				case "aws":
+				{
+				nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(5) as DeclarationFeature).value_t
+				nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(6) as DeclarationFeature).value_t	
+				}
+			}
+
+			
+			}
+		if(env == "smp"){
+			language = (environment.right as DeclarationObject).features.get(2).value_s
+			nthread = (environment.right as DeclarationObject).features.get(1).value_t
 		}
 		functionCalled = new HashMap<String, FunctionDefinition>();
 		for (element : input.allContents.toIterable.filter(FunctionDefinition)
@@ -103,7 +144,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 			functionCalled.put(element.name,element)
 		}
 		this.isAsync = async
-		this.isLocal = local 
+		this.isLocal = local
+		this.isCluster = cluster;
 		doGenerate(input,fsa,context) 
 	}
 	
@@ -153,9 +195,19 @@ class FLYGeneratorJs extends AbstractGenerator {
 		fsa.generateFile(root.name + ".js", input.compileJavaScript(root.name, true))	
 	}else {
 		if(env.equals("aws-debug"))
-				fsa.generateFile("docker-compose-script.sh",input.compileDockerCompose())
+			fsa.generateFile("docker-compose-script.sh",input.compileDockerCompose())
+		if(env.equals("k8s")){
+			fsa.generateFile("Dockerfile", input.compileDockerTemplate())
+			fsa.generateFile("template.yaml", input.compileK8sJobTemplate())
+			fsa.generateFile("kubernetes_deploy.sh", input.compileScriptDeploy(root.name, false))
+			fsa.generateFile("kubernetes_undeploy.sh", input.compileScriptUndeploy(root.name, false))
+			
+			}
+		else{
 			fsa.generateFile(root.name +"_"+ env_name +"_deploy.sh", input.compileScriptDeploy(root.name, false))
 			fsa.generateFile(root.name +"_"+ env_name + "_undeploy.sh", input.compileScriptUndeploy(root.name, false))
+			
+			}
 		}
 	}
 	
@@ -199,16 +251,22 @@ class FLYGeneratorJs extends AbstractGenerator {
 			let __params;
 			let __data;
 			«ENDIF»
-			
+			«IF env.contains("k8s")»
+			let redis = require('redis'), client = redis.createClient({port:6379,host:'redis'});
+			«ENDIF»
+		
 			«IF env.equals("azure")»
 			var __azure = require("azure-storage");
 			var __queueSvc = __azure.createQueueService("'${storageName}'", "'${storageKey}'");
 			var __axios = require("axios");
 			var __qs = require("qs");
 			«ENDIF»
+			«IF env.equals("azure") || env.equals("aws")»
 			var __util = require("util");
 			var __dataframe = require("dataframe-js").DataFrame;
 			var __mysql = require("mysql");
+			«ENDIF»
+			
 			«FOR req: exps.expressions.filter(RequireExpression)»
 			
 			«ENDFOR»
@@ -220,6 +278,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 			
 			«IF env.contains("aws")»
 			exports.handler = async (event,context) => {
+			
 			«ELSEIF env == "azure"»
 				module.exports = async function (context, req) {
 					let __scope = "https://management.azure.com/.default";
@@ -246,23 +305,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 						«IF typeSystem.get(name).get((exp as VariableDeclaration).name).equals("Table")»
 							var __data_«(exp as VariableDeclaration).name» = await new __dataframe(event.data);
 							var «(exp as VariableDeclaration).name» = __data_«(exp as VariableDeclaration).name».toArray();
-						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-							var «(exp as VariableDeclaration).name» = event.data[0].myArrayPortion;
-						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
-							__«(exp as VariableDeclaration).name»_matrix = event.data[0]
-							__«(exp as VariableDeclaration).name»_rows = event.data[0].rows;
-							__«(exp as VariableDeclaration).name»_cols = event.data[0].cols;
-							__«(exp as VariableDeclaration).name»_submatrixIndex = event.data[0].submatrixIndex;
-							__«(exp as VariableDeclaration).name»_values = event.data[0].values
-							__index = 0
-							«(exp as VariableDeclaration).name» = [];
-							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_rows; __i++) {
-								«(exp as VariableDeclaration).name»[__i] = [];
-								for (var __j = 0;__j < __«(exp as VariableDeclaration).name»_cols; __j++) {
-									«(exp as VariableDeclaration).name»[__i][__j] = __«(exp as VariableDeclaration).name»_values[__index].value;
-									__index+=1;
-								}
-							}
 						«ELSE»
 							var «(exp as VariableDeclaration).name» = event.data;
 						«ENDIF»
@@ -270,29 +312,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 						«IF typeSystem.get(name).get((exp as VariableDeclaration).name).equals("Table")»
 							var __«(exp as VariableDeclaration).name» = await new __dataframe((req.query.data || (req.body && req.body.data)));
 							var «(exp as VariableDeclaration).name» = __«(exp as VariableDeclaration).name».toArray();
-						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-							var data = await new __dataframe((req.query.data || (req.body && req.body.data)));
-							var arr_data = (data.toArray())[0];
-													
-							var «(exp as VariableDeclaration).name» = arr_data[0];
-						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
-							var data = await new __dataframe((req.query.data || (req.body && req.body.data)));
-							var arr_data = (data.toArray())[0];
-
-							var __«(exp as VariableDeclaration).name»_rows = arr_data[0];
-							var __«(exp as VariableDeclaration).name»_cols = arr_data[1];
-							var __«(exp as VariableDeclaration).name»_submatrixIndex = arr_data[2];
-							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[3]);
-							var arr_values = __«(exp as VariableDeclaration).name»_values.toArray();
-							var __index = 0
-							«(exp as VariableDeclaration).name» = [];
-							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_rows; __i++) {
-								«(exp as VariableDeclaration).name»[__i] = [];
-								for (var __j = 0;__j < __«(exp as VariableDeclaration).name»_cols; __j++) {
-									«(exp as VariableDeclaration).name»[__i][__j] = (arr_values[__index])[2];
-									__index+=1;
-								}
-							}
 						«ELSE»
 							var «(exp as VariableDeclaration).name» = (req.query.data || (req.body && req.body.data));
 						«ENDIF»
@@ -320,12 +339,16 @@ class FLYGeneratorJs extends AbstractGenerator {
 						};
 									
 						__data = await __sqs.sendMessage(__params).promise();
+						}
 					«ELSEIF env == "azure"»
 						await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("termination-'${function}'-'${id}'", "terminate");
+									}
+					«ELSEIF env == "k8s"»
+					client.on('ready', function (err) {
+						client.rpush('queue:jobs',msg)});
 					«ENDIF»
 					
 				«ENDIF»
-			}
 		'''
 	}
 	
@@ -569,7 +592,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 					}	
 				} else if(exp.right instanceof DeclarationObject){
 					var type = (exp.right as DeclarationObject).features.get(0).value_s
-					switch (type) {						
+					switch (type) {			
 						case "file":{
 							typeSystem.get(scope).put(exp.name, "File")
 							var path = "";
@@ -590,9 +613,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 							var url = "";
 							var path = (exp.right as DeclarationObject).features.get(2).value_s
 							var region = "";
-							if ((exp as VariableDeclaration).onCloud){
-								region = ((exp as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(4).value_s
-							}
+			
 							if ((exp as VariableDeclaration).onCloud && (exp.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws") && ! (path.contains("https://")))
 								url = "https://'${function}${id}'.s3." + region + ".amazonaws.com/bucket-'${id}'/" + path
 							else if ((exp as VariableDeclaration).onCloud && (exp.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("azure") && ! (path.contains("https://")))
@@ -790,7 +811,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 		var i=0;
 		var lines = expression.code.split("\n");
 		var num_tabs = 0 
-		while(lines.get(1).charAt(i).equals('\t')){
+		while(lines.get(1).charAt(i).equals(lines.get(1).charAt(0))){
 			num_tabs++; 
 			i++;
 		}
@@ -1021,38 +1042,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 						'''
 					}else
 						return''''''
-			} else if(typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).contains("Array")){
-					var name = (exp.object as VariableLiteral).variable.name;
-				
-					return '''
-						for(var «(exp.index.indices.get(0) as VariableDeclaration).name» = 0;«(exp.index.indices.get(0) as VariableDeclaration).name» < «name».length;«(exp.index.indices.get(0) as VariableDeclaration).name»++){
-							«IF exp.body instanceof BlockExpression»
-								«FOR e: (exp.body as BlockExpression).expressions»
-									«generateJsExpression(e,scope)»
-								«ENDFOR»
-							«ELSE»
-								«generateJsExpression(exp.body,scope)»
-							«ENDIF»
-						}
-					'''
-			} else if(typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).contains("Matrix")){
-					var name = (exp.object as VariableLiteral).variable.name;
-					var index_row = (exp.index.indices.get(0) as VariableDeclaration).name
-					var index_col = (exp.index.indices.get(1) as VariableDeclaration).name
-
-					return  '''
-						for(var «index_row»=0;«index_row»<«name».length;«index_row»++){
-							for(var «index_col»=0;«index_col»<«name»[0].length;«index_col»++){
-								«IF exp.body instanceof BlockExpression»
-									«FOR e: (exp.body as BlockExpression).expressions»
-										«generateJsExpression(e,scope)»
-									«ENDFOR»
-								«ELSE»
-									«generateJsExpression(exp.body,scope)»
-								«ENDIF»
-							}
-						}
-					'''
 			}
 		} 
 	}
@@ -1130,7 +1119,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 			} else if(exp.indexes.length == 2){
 				var i = generateJsArithmeticExpression(exp.indexes.get(0).value,scope)
 				var j = generateJsArithmeticExpression(exp.indexes.get(1).value,scope)
-				return '''«(exp.name as VariableDeclaration).name»[«i»][«j»]'''
+				var col = typeSystem.get(scope).get((exp.name as VariableDeclaration).name).split("_").get(2)
+				return '''«(exp.name as VariableDeclaration).name»[(«i»*«col»)+«j»]'''
 			}else{
 				//return '''«(exp.name as VariableDeclaration).name»[«generateJsArithmeticExpression(exp.indexes.get(0).value)»,«generateJsArithmeticExpression(exp.indexes.get(1).value)»,«generateJsArithmeticExpression(exp.indexes.get(2).value)»]'''
 			}
@@ -1283,7 +1273,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 	def generateJsVariableFunction(VariableFunction expression, Boolean t, String scope) {
 		if (expression.target.right instanceof DeclarationObject) {
 			var type = (expression.target.right as DeclarationObject).features.get(0).value_s
-			
 			switch (type){
 				case "query":{
 					var queryType = (expression.target.right as DeclarationObject).features.get(1).value_s
@@ -1317,7 +1306,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 				default :{
 					return generateJsArithmeticExpression(expression, scope)
 				}
-			}
+			} 
 		}else{
 			return generateJsArithmeticExpression(expression, scope)
 		}
@@ -1328,6 +1317,18 @@ class FLYGeneratorJs extends AbstractGenerator {
 		   case "aws": AWSDeploy(resource,name,local,false)
 		   case "aws-debug": AWSDebugDeploy(resource,name,local,true)
 		   case "azure": AzureDeploy(resource,name,local)
+		   case "k8s": {
+		   	if(right_env.contains("smp")){
+		   		k8sDeploy(resource,name,local,false)
+		   		}
+		   	else if(right_env.contains("azure")){
+		   		K8sAzureDeploy(resource)
+		   		}
+		   	else if(right_env.contains("aws")){
+		   		K8sAWSDeploy(resource)
+		   		
+		   	}
+		   }
 		   default: this.env+" not supported"
   		}
 	} 
@@ -1558,6 +1559,241 @@ class FLYGeneratorJs extends AbstractGenerator {
 	
 	'''
 	
+	def CharSequence k8sDeploy(Resource resource, String name, boolean local, boolean debug)
+	'''
+	#!/bin/bash
+	«isK8sOk(resource)»
+	cd src-gen/
+	echo "launching Redis deployment..."
+	
+	echo "«generateIntK8Service(resource)»" > int-svc.yaml
+	kubectl apply -f int-svc.yaml
+	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-pod.yaml
+	
+	echo "Entering in the Node env"
+	echo "Generating Js code..."
+	echo "«generateBodyJs(resource,root.body,root.parameters,name,env)»
+				«FOR fd:functionCalled.values()»
+					
+				«generateJsExpression(fd, name)»
+				
+				«ENDFOR»
+	" > main.js
+	
+	echo "Js file created"
+	echo "Building and pushing the flying image"
+	
+	docker build -t fly_node . 
+	docker tag fly_node «registryName»/fly_node
+	docker push «registryName»/fly_node
+	
+	echo "it's the moment:"
+	
+	export completions=«nreplicas»
+	export parallelism=«nparallels»
+	export registryName=«registryName»
+	
+	( echo "cat <<EOF >node.yaml";
+	  cat template.yaml;
+	  echo "EOF";
+	) >temp.yml
+	. temp.yml
+	cat node.yaml
+	
+	kubectl apply -f node.yaml
+	echo "We are Flying!! :)"
+	kubectl wait --for=condition=complete --timeout=120s -f node.yaml
+	
+	kubectl logs job/fly-job
+	rm -f node.yaml temp.yml template.yaml Dockerfile kubernetes_deploy.sh main.js int-svc.yaml
+	'''
+	
+	def CharSequence K8sAzureDeploy(Resource resource){
+	'''
+	#!/bin/bash
+ 	az aks get-credentials --resource-group Fly --name Fly
+	«isK8sOk(resource)»
+	echo "launching Redis deployment..."
+	cd src-gen/		
+	echo "«generateExtK8Service(resource)»" > ext-svc.yaml	
+ 	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-pod.yaml
+    kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-service.yaml
+ 	kubectl apply -f ext-svc.yaml
+ 	
+	    echo "Entering in the Node env"
+		echo "Generating Js code..."
+		echo "«generateBodyJs(resource,root.body,root.parameters,name,env)»
+					«FOR fd:functionCalled.values()»
+						
+					«generateJsExpression(fd, name)»
+					
+					«ENDFOR»
+		" > main.js
+		
+	    echo "Js file created"
+	    echo "Building and pushing the flying image"
+	    az acr build --registry «registryName» --image fly_node .
+	    
+	    echo "it's the moment:"
+	    
+		export completions=«nreplicas»
+		export parallelism=«nparallels»
+		export registryName=«registryName»
+		
+		( echo "cat <<EOF >node.yaml";
+		  cat template.yaml;
+		  echo "EOF";
+		) >temp.yml
+		. temp.yml
+		cat node.yaml
+		kubectl apply -f node.yaml
+		echo "We are Flying!! :)"
+		kubectl wait --for=condition=complete --timeout=120s -f node.yaml
+		kubectl logs job/fly-job
+		rm -f node.yaml temp.yml template.yaml Dockerfile kubernetes_deploy.sh main.js ext-svc.yaml	
+	'''
+	}
+	
+		def CharSequence K8sAWSDeploy(Resource resource){
+	'''
+	#!/bin/bash
+	aws eks update-kubeconfig --name Fly
+	«isK8sOk(resource)»
+	echo "launching Redis deployment..."
+	cd src-gen/		
+	echo "«generateExtK8Service(resource)»" > ext-svc.yaml	
+ 	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-pod.yaml
+    kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-service.yaml
+ 	kubectl apply -f ext-svc.yaml
+ 	
+	    echo "Entering in the Node env"
+		echo "Generating Js code..."
+		echo "«generateBodyJs(resource,root.body,root.parameters,name,env)»
+					«FOR fd:functionCalled.values()»
+						
+					«generateJsExpression(fd, name)»
+					
+					«ENDFOR»
+		" > main.js
+		
+	    echo "Js file created"
+	    echo "Building and pushing the flying image"
+	    az acr build --registry «registryName» --image fly_node .
+	    
+	    echo "it's the moment:"
+	    
+		export completions=«nreplicas»
+		export parallelism=«nparallels»
+		export registryName=«registryName»
+		
+		( echo "cat <<EOF >node.yaml";
+		  cat template.yaml;
+		  echo "EOF";
+		) >temp.yml
+		. temp.yml
+		cat node.yaml
+		kubectl apply -f node.yaml
+		echo "We are Flying!! :)"
+		kubectl wait --for=condition=complete --timeout=120s -f node.yaml
+		kubectl logs job/fly-job
+		rm -f node.yaml temp.yml template.yaml Dockerfile kubernetes_deploy.sh main.js ext-svc.yaml	
+	'''
+	}
+	
+		
+	def CharSequence isK8sOk(Resource resource){
+	'''
+		echo "checking if Docker is on and fine ..."
+		docker info > /dev/null 2>&1
+		
+		if [ $? -eq 0 ]; then
+			echo "Docker is on :) continuing..."
+		else
+		     echo "Docker doesn't responding... :("
+		     exit 1
+		fi
+		
+		
+		echo "checking if Kubernetes is on and fine ..."
+		kubectl cluster-info > /dev/null 2>&1 #Da rivedere in caso il cluster non sia in locale
+		
+		if [ $? -eq 0 ]; then
+			echo "Kube says hello :) continuing..."
+		else
+		     echo "Kube has something wrong :("
+		     exit 1
+		fi
+	'''
+	}
+	def CharSequence compileDockerTemplate(Resource resource){
+		'''
+		FROM node:10
+		MAINTAINER Luigi Barbato <l.barbato11@studenti.unisa.it>
+		EXPOSE 8888
+		WORKDIR /function
+		COPY ./main.js .
+		RUN npm install redis
+		CMD ["node", "main.js"]
+		'''
+	}
+	def CharSequence generateExtK8Service(Resource resource){
+	'''
+	apiVersion: v1
+	kind: Service
+	metadata:
+	  name: public-svc
+	spec:
+	  type: LoadBalancer
+	  ports:
+	  - port: 6379
+	  selector:
+	    app: redis
+	'''
+	}
+	def CharSequence generateIntK8Service(Resource resource){
+	'''
+	apiVersion: v1
+	kind: Service
+	metadata:
+	  name: redis
+	  labels:
+	    app: redis
+	spec:
+	  type: NodePort
+	  ports:
+	    - port: 6379
+	      targetPort: 6379
+	      nodePort: 30014
+	      protocol: TCP
+	      name: redis
+	  selector:
+	    app: redis
+
+	'''
+	}		
+   def CharSequence compileK8sJobTemplate(Resource resource){
+   	'''
+   	apiVersion: batch/v1
+   	kind: Job
+   	metadata:
+   	  name: fly-job
+   	spec:
+   	  parallelism: ${parallelism}
+   	  completions: ${completions}
+   	  ttlSecondsAfterFinished: 5
+   	  template:
+   	    metadata:
+   	      name: fly
+   	      labels:
+   	        jobgroup: fly
+   	    spec:
+   	      containers:
+   	        - name: fly-node
+   	          image: ${registryName}/fly_node
+   	          command: [ "node", "./main.js" ]
+   	      restartPolicy: Never
+   	'''
+   }
 	def CharSequence AWSUndeploy(Resource resource, String name)'''
 		#!/bin/bash
 			
@@ -1599,15 +1835,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 			echo "delete lambda function: «res.target.name»_${id}"
 			aws lambda --profile ${user} delete-function --function-name «res.target.name»_${id}
 			
-			# delete S3 bucket if existent
-			functionLowerCase=${2,,}
-			if aws s3 ls "s3://${functionLowerCase}${id}bucket" 2>&1 | grep -q 'An error occurred'
-			then
-			    echo "bucket does not exist, no need to delete it"
-			else
-			    echo "bucket exist, so it has to be deleted"
-			    aws s3 rb s3://${functionLowerCase}${id}bucket --force
-			fi
 		«ENDFOR»
 	'''
 	
@@ -1840,7 +2067,14 @@ class FLYGeneratorJs extends AbstractGenerator {
 		rm rolePolicyDocument.json
 		rm policyDocument.json
 		'''
-
+	def CharSequence K8sUndeploy(Resource resource, String string, boolean local)'''
+	#!/bin/bash
+	
+	kubectl delete job/fly-job
+	kubectl delete pod/redis-master
+	kubectl delete svc redis
+	kubectl delete svc public-svc
+	'''
 	def CharSequence compileDockerCompose(Resource resource)
 	'''
 		docker network create -d bridge --subnet 192.168.0.0/24 --gateway 192.168.0.1 flynet
@@ -2055,6 +2289,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 			   case "aws": AWSUndeploy(resource,name)
 			   case "aws-debug": AWSDebugUndeploy(resource,name)
 			   case "azure": AzureUndeploy(resource,name,local)
+			   case "k8s": K8sUndeploy(resource,name,local)
 			   default: this.env+" not supported"
 	  		}
 	} 
