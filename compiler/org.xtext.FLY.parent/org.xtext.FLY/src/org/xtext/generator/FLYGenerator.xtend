@@ -87,7 +87,8 @@ class FLYGenerator extends AbstractGenerator {
 	var deployed_function = new HashMap<String,ArrayList<String>>();
 	var func_undeploy_counter = -1
 	var func_termination_counter = 0
-	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure","vm-cluster"));
+	var right_env = ""
+	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure","vm-cluster","k8s"));
 	Resource res = null
 
 	override void doGenerate(Resource resource, IFileSystemAccess2 fsa, IGeneratorContext context) {
@@ -103,19 +104,39 @@ class FLYGenerator extends AbstractGenerator {
 			for (element : resource.allContents.toIterable.filter(FlyFunctionCall)) {
 				var type_env = ((element.environment.right as DeclarationObject).features.get(0) as DeclarationFeature).value_s;
 				var async = element.isAsync;
-				if(type_env.equals("smp") && ((element.environment.right as DeclarationObject).features.length==3)){
+				if (type_env.equals("k8s")){
+					var language = ""
+					right_env = ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s
+							if(right_env.contains("azure")){
+							language = ((element.environment.environment.get(0).right as DeclarationObject).features.get(6) as DeclarationFeature).value_s
+							
+							}
+							else{
+							language = ((element.environment.environment.get(0).right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
+							
+							}
+						    if (language.contains("python")){
+						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async,true); 
+					}else if (language.contains("nodejs")) {
+						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async,true);
+					}
+									//Generate .java files (Kubernetes)
+					fsa.generateFile(name + ".java", resource.compileJavaForK8s)
+					return
+				}
+				else if(type_env.equals("smp") && ((element.environment.right as DeclarationObject).features.length==3)){
 					// generate .java file (local)
 					fsa.generateFile(name + ".java", resource.compileJava)
 					if(((element.environment.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.contains("python")){
-						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,true,async);
+						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,true,async,true);
 					}else{
-						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,true,async);
+						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,true,async,true);
 					}	
 				}else if(type_env.equals("smp")){
 					// generate .java file (local)
 					fsa.generateFile(name + ".java", resource.compileJava)
 				}
-				if ( (type_env != "smp") && (type_env != "vm-cluster")) {
+				else if ( (type_env != "smp") && (type_env != "vm-cluster")) {
 					// generate .java file (serverless)
 					fsa.generateFile(name + ".java", resource.compileJava)
 					var language =""
@@ -131,13 +152,13 @@ class FLYGenerator extends AbstractGenerator {
 						case "azure":{
 							language = ((element.environment.right as DeclarationObject).features.get(6) as DeclarationFeature).value_s;
 							
-						}
+						}			
 					}
 					
 					if (language.contains("python")){
-						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async); 
+						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async,true); 
 					}else if (language.contains("nodejs")) {
-						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async);
+						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async,true);
 					}
 				}
 				if(type_env.equals("vm-cluster")){
@@ -199,6 +220,18 @@ class FLYGenerator extends AbstractGenerator {
 	import org.apache.commons.io.FileUtils;
 	import org.apache.commons.io.FileUtils;
 	import java.sql.*;
+	import com.mongodb.MongoClient;
+	import com.mongodb.MongoClientURI;
+	import com.mongodb.client.MongoCollection;
+	import com.mongodb.client.MongoCursor;
+	import org.bson.*;
+	import java.io.FileReader;
+	import com.opencsv.CSVReader;
+	import java.util.Properties;
+	import org.apache.log4j.PropertyConfigurator;
+	import java.util.Iterator;
+	import tech.tablesaw.api.StringColumn;
+	import tech.tablesaw.api.IntColumn;
 
 	«IF checkAzure()»
 	import isislab.azureclient.AzureClient;
@@ -580,6 +613,18 @@ class FLYGenerator extends AbstractGenerator {
 	import org.apache.commons.io.FileUtils;
 	import org.apache.commons.io.FileUtils;
 	import java.sql.*;
+	import com.mongodb.MongoClient;
+	import com.mongodb.MongoClientURI;
+	import com.mongodb.client.MongoCollection;
+	import com.mongodb.client.MongoCursor;
+	import org.bson.*;
+	import java.io.FileReader;
+	import com.opencsv.CSVReader;
+	import java.util.Properties;
+	import org.apache.log4j.PropertyConfigurator;
+	import java.util.Iterator;
+	import tech.tablesaw.api.StringColumn;
+	import tech.tablesaw.api.IntColumn;
 
 		«IF checkAzure()»
 		import isislab.azureclient.AzureClient;
@@ -670,16 +715,7 @@ class FLYGenerator extends AbstractGenerator {
 			}
 	'''
 		
-	
-	
-		
- 	def CharSequence compileJava(Resource resource){
-	var termination_init_counter = 0
-	var termination_counter = 0
-	func_termination_counter = 0
-	
- 	var s = ""
- 	s += '''
+	def CharSequence compileJavaForK8s(Resource resource) '''
 	import java.io.File;
 	import java.io.FileInputStream;
 	import java.io.InputStreamReader;
@@ -784,6 +820,409 @@ class FLYGenerator extends AbstractGenerator {
 	import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
 		«ENDIF»
 	import com.google.gson.Gson;
+	import com.google.gson.reflect.TypeToken;
+		«IF checkAzure()»
+	import com.microsoft.azure.management.resources.fluentcore.arm.Region;
+	import isislab.azureclient.AzureClient;
+		«ENDIF»
+		«IF isK8s()»
+	import redis.clients.jedis.*;
+		«ENDIF»
+		
+		public class «name» {
+			
+			static HashMap<String,HashMap<String, Object>> __fly_environment = new HashMap<String,HashMap<String,Object>>();
+			static HashMap<String,HashMap<String,Integer>> __fly_async_invocation_id = new HashMap<String,HashMap<String,Integer>>();
+			static final String __environment = "smp";
+			static long  __id_execution =  System.currentTimeMillis();
+			«FOR element : (resource.allContents.toIterable.filter(Expression))»
+				«IF element instanceof VariableDeclaration»
+					«IF element.right instanceof DeclarationObject 
+						&& ( (element.right as DeclarationObject).features.get(0).value_s.equals("channel") || list_environment.contains((element.right as DeclarationObject).features.get(0).value_s) )»
+						«generateVariableDeclaration(element,"main")»
+					«ENDIF»
+				«ENDIF»
+				«IF element instanceof ConstantDeclaration»
+					«generateConstantDeclaration(element,"main")»	
+				«ENDIF»
+			«ENDFOR»
+			«FOR element : resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
+				static boolean __wait_on_termination_«element.target.name» = true;
+			«ENDFOR»
+			
+			public static void main(String[] args) throws Exception{
+				«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
+					«initialiseConstant(element,"main")»
+				«ENDFOR»
+				«IF checkAWSDebug()»
+				Runtime.getRuntime().exec("chmod +x src-gen/docker-compose-script.sh");
+				ProcessBuilder __processBuilder_docker_compose = new ProcessBuilder("/bin/bash", "-c", "src-gen/docker-compose-script.sh");
+				Map<String, String> __env_docker_compose = __processBuilder_docker_compose.environment();
+				String __path_env_docker_compose = __env_docker_compose.get("PATH");
+				if (!__path_env_docker_compose.contains("/usr/local/bin")) {
+					 __env_docker_compose.put("PATH", __path_env_docker_compose+":/usr/local/bin");
+				}
+				Process __p_docker_compose;
+				try {
+					__p_docker_compose = __processBuilder_docker_compose.start();
+					BufferedReader __p_docker_compose_output = new BufferedReader(new InputStreamReader(__p_docker_compose.getInputStream()));
+					String __docker_compose_output_line = __p_docker_compose_output.readLine();
+					while(__docker_compose_output_line !=null) {
+						System.out.println(__docker_compose_output_line);
+						if (__docker_compose_output_line.contains("Ready."))
+							break;
+						__docker_compose_output_line=__p_docker_compose_output.readLine();
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
+				}		
+				«ENDIF»
+				
+				«IF isK8s()»
+				Runtime.getRuntime().exec("chmod +x src-gen/kubernetes_deploy.sh");
+								ProcessBuilder __processBuilder_kubernetes_deployer = new ProcessBuilder("/bin/bash", "-c", "src-gen/kubernetes_deploy.sh");
+								Map<String, String> __env_kubernetes_deployer = __processBuilder_kubernetes_deployer.environment();
+								String __path_env_kubernetes_deployer = __env_kubernetes_deployer.get("PATH");
+								if (!__path_env_kubernetes_deployer.contains("/usr/local/bin")) {
+									 __env_kubernetes_deployer.put("PATH", __path_env_kubernetes_deployer+":/usr/local/bin");
+								}
+								Process __p_kubernetes_deployer;
+								try {
+									__p_kubernetes_deployer = __processBuilder_kubernetes_deployer.start();
+									BufferedReader __p_kubernetes_deployer_output = new BufferedReader(new InputStreamReader(__p_kubernetes_deployer.getInputStream()));
+									String __kubernetes_deployer_output_line = __p_kubernetes_deployer_output.readLine();
+									while(__kubernetes_deployer_output_line !=null) {
+										System.out.println(__kubernetes_deployer_output_line);
+										__kubernetes_deployer_output_line=__p_kubernetes_deployer_output.readLine();
+									}
+								} catch (Exception e) {
+									e.printStackTrace();
+								}
+								StringBuilder svcIP = new StringBuilder();
+								ProcessBuilder processBuilder = new ProcessBuilder();
+															«IF (right_env != "smp")»
+													        processBuilder.command("bash", "-c", "kubectl get service/public-svc -o jsonpath='{.status.loadBalancer.ingress[*].ip}'");
+													        «ELSE»
+													        processBuilder.command("bash", "-c", "minikube ip");
+													        «ENDIF»
+													        try {
+													
+													            Process process = processBuilder.start();
+													
+													
+													            BufferedReader reader = new BufferedReader(
+													                    new InputStreamReader(process.getInputStream()));
+													
+													            String line;
+													            while ((line = reader.readLine()) != null) {
+													                svcIP.append(line);
+													            }
+													
+													            int exitVal = process.waitFor();
+													            if (exitVal == 0) {
+													                System.out.println("Success!");
+													                System.out.println("The service IP exposed is: " + svcIP);
+													            } else {
+													                //abnormal...
+													            }
+													
+													        } catch (IOException e) {
+													            e.printStackTrace();
+													        } catch (InterruptedException e) {
+													            e.printStackTrace();
+													        }
+													        							        		
+				«FOR element : resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]»
+					«setEnvironmentDeclarationInfo(element)»
+				«ENDFOR»
+				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
+				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+					«IF !(element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp")»
+					«generateChanelDeclarationForCloud(element)»
+					«ELSEIF (element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp") &&
+						(element.environment.get(0).right as DeclarationObject).features.length==3»
+						«generateChannelDeclarationForLanguage(element)»
+					«ENDIF»
+				«ENDFOR»
+			«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
+				«IF checkBlock(element.eContainer)==false»
+					«generateFunctionDefinition(element)»
+				«ENDIF»	
+			«ENDFOR»															
+			«ELSE»	
+				«FOR element : resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]»
+					«setEnvironmentDeclarationInfo(element)»
+				«ENDFOR»
+				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+					&& !((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
+					ExecutorService __thread_pool_«element.name» = Executors.newFixedThreadPool((int) __fly_environment.get("«resource.allContents.toIterable.filter(VariableDeclaration)
+					.filter[right instanceof DeclarationObject].filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))].get(0).name»").get("nthread"));
+				«ENDFOR»
+				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+				filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
+					«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
+						"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
+						"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
+						"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
+						__id_execution+"",
+						"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»");
+					«element.name».init();
+					«element.name».createFunctionApp("flyapp«element.name»","«(element.right as DeclarationObject).features.get(6).value_s»");
+				«ENDFOR»
+				«IF resource.allContents.toIterable.filter(FlyFunctionCall)
+				.filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")].length > 0»
+					ExecutorService __thread_pool_deploy_on_cloud = Executors.newFixedThreadPool((int) __fly_environment.get("«resource.allContents.toIterable.filter(VariableDeclaration)
+					.filter[right instanceof DeclarationObject].filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))].get(0).name»").get("nthread"));	
+					ArrayList<Future<Object>> __termination_deploy_on_cloud = new ArrayList();		
+					«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall)
+					.filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
+						«deployFlyFunctionOnCloud(element)»
+					«ENDFOR»
+					for (Future<Object> f: __termination_deploy_on_cloud){
+						try {
+							f.get();
+						} catch (InterruptedException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						} catch (ExecutionException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
+					System.out.println("Deploy effettuato");
+				«ENDIF»
+				
+				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
+				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+					«IF !(element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp")»
+					«generateChanelDeclarationForCloud(element)»
+					«ELSEIF (element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp") &&
+						(element.environment.get(0).right as DeclarationObject).features.length==3»
+						«generateChannelDeclarationForLanguage(element)»
+					«ENDIF»
+				«ENDFOR»
+				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp") && !(environment.right as DeclarationObject).features.get(0).value_s.equals("k8s")]»
+						«generateTerminationQueue(element,1)»
+				«ENDFOR»
+				
+				«FOR element : resource.allContents.toIterable.filter(Expression)»
+					«IF checkBlock(element.eContainer)==false»
+						«generateExpression(element,"main")»
+					«ENDIF»
+				«ENDFOR»
+				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall)
+				.filter[!(environment.right as DeclarationObject).features.get(0).equals("smp")]»
+					«undeployFlyFunctionOnCloud(element)»
+				«ENDFOR»
+				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
+					__thread_pool_«element.name».shutdown();
+				«ENDFOR»
+				System.exit(0);
+			}
+				
+			«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
+				«IF checkBlock(element.eContainer)==false»
+					«generateFunctionDefinition(element)»
+				«ENDIF»	
+			«ENDFOR»	
+	«ENDIF»
+
+			private static String __generateString(Table t,int id) {
+				StringBuilder b = new StringBuilder();
+				b.append("{\"id\":\""+id+"\",\"data\":");
+				b.append("[");
+				int i_r = t.rowCount();
+				for(Row r : t) {
+					b.append('{');
+					for (int i=0;i< r.columnCount();i++) {
+						b.append("\""+ r.columnNames().get(i) +"\":\""+r.getObject(i)+ ((i<r.columnCount()-1)?"\",":""));
+					}
+					b.append("\"}"+(((i_r != 1 ))?",":""));
+					i_r--;
+				}
+				b.append("]}");
+				return b.toString();
+			}
+			
+			private static String __generateString(String s,int id) {
+				StringBuilder b = new StringBuilder();
+				b.append("{\"id\":"+id+",\"data\":");
+				b.append("[");
+				String[] tmp = s.split("\n");
+				for(String t: tmp){
+					b.append(t);
+					if(t != tmp[tmp.length-1]){
+						b.append(",");
+					} 
+				}
+				b.append("]}");
+				return b.toString();
+			}
+		
+	}
+	'''
+	
+		
+		def CharSequence undeployK8s(){
+		return
+		'''
+		Runtime.getRuntime().exec("chmod +x src-gen/kubernetes_undeploy.sh");
+		ProcessBuilder __processBuilder_undeploy_kubernetes= new ProcessBuilder("/bin/bash", "-c", "src-gen/kubernetes_undeploy.sh");
+		Map<String, String> __env_undeploy_kubernetes = __processBuilder_undeploy_kubernetes.environment();
+							
+		__processBuilder_undeploy_kubernetes.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+		__processBuilder_undeploy_kubernetes.redirectError(ProcessBuilder.Redirect.INHERIT);
+		String __path_env_undeploy_kubernetes = __env_undeploy_kubernetes.get("PATH");
+				if (!__path_env_undeploy_kubernetes.contains("/usr/local/bin")) {
+										 __env_undeploy_kubernetes.put("PATH", __path_env_undeploy_kubernetes+":/usr/local/bin");
+									}
+									Process __p_undeploy_kubernetes;
+									try {
+										__p_undeploy_kubernetes= __processBuilder_undeploy_kubernetes.start();
+										__p_undeploy_kubernetes.waitFor();
+										if(__p_undeploy_kubernetes.exitValue()!=0){
+											System.out.println("Error in kubernetes_undeploy.sh ");
+											System.exit(1);
+										}
+									} catch (Exception e) {
+										e.printStackTrace();
+									}	
+				'''					
+				}
+		
+ 	def CharSequence compileJava(Resource resource){
+	var termination_init_counter = 0
+	var termination_counter = 0
+	func_termination_counter = 0
+	
+ 	var s = ""
+ 	s += '''
+	import java.io.File;
+	import java.io.FileInputStream;
+	import java.io.InputStreamReader;
+	import java.io.FileOutputStream;
+	import java.io.OutputStreamWriter;
+	import java.io.IOException;
+	import java.nio.ByteBuffer;
+	import java.nio.channels.FileChannel;
+	import java.nio.file.StandardOpenOption;
+	import java.io.InputStream;
+	import java.net.ServerSocket;
+	import java.net.Socket;
+	import java.io.BufferedReader;
+	import java.util.ArrayList;
+	import java.util.Arrays;
+	import java.util.List;
+	import java.util.zip.ZipEntry;
+	import java.util.zip.ZipOutputStream;
+	import java.io.BufferedWriter;
+	import java.io.FileWriter;
+	import java.io.IOException;
+	import java.util.HashMap;
+	import java.time.LocalDate;
+	import tech.tablesaw.api.Table;
+	import tech.tablesaw.io.csv.CsvReadOptions;
+	import tech.tablesaw.io.csv.CsvWriteOptions;
+	import tech.tablesaw.columns.Column;
+	import tech.tablesaw.selection.Selection;
+	import tech.tablesaw.table.Rows;
+	import tech.tablesaw.api.Row;
+	import java.util.concurrent.LinkedTransferQueue;
+	import java.util.concurrent.ExecutorService;
+	import java.util.concurrent.Executors;
+	import java.util.concurrent.ExecutionException;
+	import java.util.ArrayList;
+	import java.util.List;
+	import java.util.concurrent.Callable;
+	import java.util.concurrent.Future;
+	import java.util.concurrent.atomic.AtomicInteger;
+	import java.util.Random;
+	import java.util.Collections;
+	import java.util.Comparator;
+	import java.util.Map;
+	import java.util.Scanner;
+	import org.apache.commons.io.FileUtils;
+	import org.apache.commons.io.FileUtils;
+	import java.sql.*;
+	import com.mongodb.MongoClient;
+	import com.mongodb.MongoClientURI;
+	import com.mongodb.client.MongoCollection;
+	import com.mongodb.client.MongoCursor;
+	import org.bson.*;
+	import java.io.FileReader;
+	import com.opencsv.CSVReader;
+	import java.util.Properties;
+	import org.apache.log4j.PropertyConfigurator;
+	import java.util.Iterator;
+	import tech.tablesaw.api.StringColumn;
+	import tech.tablesaw.api.IntColumn;
+		«IF checkAWS() || checkAWSDebug()»
+	import com.amazonaws.AmazonClientException;
+	import com.amazonaws.auth.AWSStaticCredentialsProvider;
+	import com.amazonaws.auth.BasicAWSCredentials;
+	import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+	import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
+	import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
+	import com.amazonaws.services.identitymanagement.model.CreateRoleRequest;
+	import com.amazonaws.services.identitymanagement.model.CreateRoleResult;
+	import com.amazonaws.services.identitymanagement.model.DeleteRolePolicyRequest;
+	import com.amazonaws.services.identitymanagement.model.DeleteRoleRequest;
+	import com.amazonaws.services.identitymanagement.model.PutRolePolicyRequest;
+	import com.amazonaws.services.lambda.AWSLambda;
+	import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
+	import com.amazonaws.services.lambda.model.AddPermissionRequest;
+	import com.amazonaws.services.lambda.model.AddPermissionResult;
+	import com.amazonaws.services.lambda.model.CreateFunctionRequest;
+	import com.amazonaws.services.lambda.model.CreateFunctionResult;
+	import com.amazonaws.services.lambda.model.DeleteFunctionRequest;
+	import com.amazonaws.services.lambda.model.FunctionCode;
+	import com.amazonaws.services.lambda.model.InvokeRequest;
+	import com.amazonaws.services.sqs.AmazonSQS;
+	import com.amazonaws.services.sqs.model.Message;
+	import com.amazonaws.services.sqs.AmazonSQSClient;
+	import com.amazonaws.services.sqs.model.CreateQueueRequest;
+	import com.amazonaws.services.sqs.model.CreateQueueResult;
+	import com.amazonaws.services.sqs.model.ReceiveMessageRequest;
+	import com.amazonaws.services.sqs.model.ReceiveMessageResult;
+	import com.amazonaws.services.sqs.model.SendMessageRequest;
+	import com.amazonaws.services.sqs.model.AmazonSQSException;
+	import com.amazonaws.services.sqs.model.GetQueueAttributesRequest;
+	import com.amazonaws.services.sqs.model.GetQueueUrlResult;
+	import com.amazonaws.services.sqs.model.DeleteQueueRequest;
+	import com.amazonaws.services.identitymanagement.model.GetRoleRequest;
+	import com.amazonaws.services.identitymanagement.model.GetRoleResult;
+	import com.amazonaws.services.s3.AmazonS3;
+	import com.amazonaws.services.s3.AmazonS3Client;
+	import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+	import com.amazonaws.services.s3.model.AmazonS3Exception;
+	import com.amazonaws.services.s3.model.Bucket;
+	import com.amazonaws.services.s3.model.CannedAccessControlList;
+	import com.amazonaws.services.s3.model.PutObjectRequest;
+	import com.amazonaws.services.s3.model.ListObjectsV2Result;
+	import com.amazonaws.services.s3.model.PutObjectRequest;
+	import com.amazonaws.services.s3.model.S3ObjectSummary;
+	import com.amazonaws.services.rds.AmazonRDS;
+	import com.amazonaws.services.rds.AmazonRDSClient;
+	import com.amazonaws.services.rds.model.DBInstance;
+	import com.amazonaws.services.rds.model.DescribeDBInstancesRequest;
+	import com.amazonaws.services.rds.model.DescribeDBInstancesResult;
+	import com.amazonaws.services.rds.model.Endpoint;
+
+		«ENDIF»
+		«IF checkAWSDebug()»
+	import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
+		«ENDIF»
+	import com.google.gson.Gson;
+	import com.google.gson.JsonArray;
+	import com.google.gson.JsonObject;
+	import com.google.gson.JsonParser;
 	import com.google.gson.reflect.TypeToken;
 		«IF checkAzure()»
 	import com.microsoft.azure.management.resources.fluentcore.arm.Region;
@@ -950,16 +1389,193 @@ class FLYGenerator extends AbstractGenerator {
 				b.append("]}");
 				return b.toString();
 			}
-		
+
+			private static List <Table> __generateTableFromNoSQLQuery(MongoCursor <Document> ___mongoCursor) {
+				List <Table> ___resultGenerateTableFromNoSQLQuery = new ArrayList <> ();
+
+				if(!___mongoCursor.hasNext()) 
+					return ___resultGenerateTableFromNoSQLQuery;
+
+				org.json.JSONObject ___jsonObject;
+				ArrayList <ArrayList <String>> ___listFeatures = new ArrayList <> ();
+				ArrayList <org.json.JSONArray> ___listObjects = new ArrayList <> ();
+
+				while(___mongoCursor.hasNext()) {
+					___jsonObject = new org.json.JSONObject(___mongoCursor.next().toJson());
+					Iterator <String> ___iteratorJsonObjectKeys = ___jsonObject.keys();
+					ArrayList <String> ___listFeaturesCurrent = new ArrayList <String> ();
+
+					while(___iteratorJsonObjectKeys.hasNext())
+						___listFeaturesCurrent.add(___iteratorJsonObjectKeys.next());
+
+					int ___i = 0;
+					for(; ___i < ___listFeatures.size(); ++___i)
+						if(___listFeatures.get(___i).equals(___listFeaturesCurrent))
+							break;
+
+					if(___i >= ___listFeatures.size()) {
+						___listFeatures.add(___listFeaturesCurrent);
+						org.json.JSONArray ___listObjectForThisFeatures = new org.json.JSONArray();
+						___listObjectForThisFeatures.put(___jsonObject);
+						___listObjects.add(___listObjectForThisFeatures);
+					} else
+						___listObjects.get(___i).put(___jsonObject);
+				}
+
+				for(int ___i = 0; ___i < ___listFeatures.size(); ++___i) {
+					Table ___table = Table.create();
+					ArrayList <String> ___features = ___listFeatures.get(___i);
+					org.json.JSONArray ___objects = ___listObjects.get(___i);
+
+					for(Column <?> ___column : ___generateColumns("", ___features, ___objects))
+						___table.addColumns(___column);
+
+					___resultGenerateTableFromNoSQLQuery.add(___table);
+				}			
+				return 	___resultGenerateTableFromNoSQLQuery;		
+
+			}
+
+			private static List <Column <?>> ___generateColumns(
+					String ___nameColumn, List <String> ___features, org.json.JSONArray ___objects) {
+				List <Column <?>> ___columns = new ArrayList <> ();
+				int ___j = 0;
+
+				for(String ___feature : ___features) {				
+					org.json.JSONObject ___object = ___objects.getJSONObject(0);
+					Object ___value = ___object.get(___feature);
+
+					if(___value instanceof org.json.JSONObject) {
+						___columns.add(StringColumn.create(___feature, ((org.json.JSONObject) ___value).toString()));
+
+						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+							___object = ___objects.getJSONObject(___i);
+							___value = ___object.get(___feature);
+
+							((StringColumn) ___columns.get(___j)).append(((org.json.JSONObject) ___value).toString());
+						}
+						++___j;
+
+					} else if(___value instanceof org.json.JSONArray) {
+						___columns.add(StringColumn.create(___feature, ((org.json.JSONArray) ___value).toString()));
+
+						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+							___object = ___objects.getJSONObject(___i);
+							___value = ___object.get(___feature);
+
+							((StringColumn) ___columns.get(___j)).append(((org.json.JSONArray) ___value).toString());
+						}
+						++___j;
+
+					} else {
+
+						if(___value instanceof Integer) {
+							IntColumn ___columnToAdd = IntColumn.create(___nameColumn + ___feature);
+							___columnToAdd.append((Integer) ___value);
+							___columns.add(___columnToAdd);
+						} else				
+							___columns.add(StringColumn.create(___nameColumn +___feature, "" + ___value));
+
+						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+							___object = ___objects.getJSONObject(___i);
+							___value = ___object.get(___feature);
+
+							if(___value instanceof Integer)
+								((IntColumn) ___columns.get(___j)).append((Integer) ___value);
+							else
+								((StringColumn) ___columns.get(___j)).append("" + ___value);					
+						}
+						++___j;
+
+					}								
+				}			
+				return ___columns;
+
+			}
+
+			@SuppressWarnings("unchecked")
+			private static Object __executeDistributedQuery(char typeQuery, Object query, ArrayList <MongoCollection <Document>> sourceList) {
+				switch(typeQuery) {			
+					case 'S':
+						List <Table> __table = new ArrayList <> ();
+						for(MongoCollection <Document> source: sourceList) {
+							List <Table> __tmp = __generateTableFromNoSQLQuery(source.find((BsonDocument) query).cursor());
+							if(__table.size() == 0)
+								__table = __tmp;
+							else {
+								for(int i = 0; i < __table.size(); i++) {
+									boolean flag = false;
+
+									for(int j = 0; j < __tmp.size(); j++) {										
+										if(__table.get(i).columnCount() == __tmp.get(j).columnCount()) {
+											// Se le colonne hanno lo stesso numero
+											Iterator <String> iterator = __table.get(i).columnNames().iterator();
+											Iterator <String> iteratorTmp = __tmp.get(j).columnNames().iterator();
+
+											// Controllo se effettivamente le colonne sono uguali
+											int countIterator = 0;
+											int countColumns = __table.get(i).columnCount();
+
+											while(iterator.hasNext()) {											
+												if(iterator.next().equals(iteratorTmp.next()))
+														countIterator++;
+												else break;											
+											}
+
+											// Controllo sui contatori
+											if(countIterator == countColumns) { // Se sono uguali, le colonne sono uguali
+												__table.get(i).append(__tmp.get(j));
+												__tmp.remove(j); // Rimuovo la tabella appena aggiunta+
+												flag = true;
+												break;
+											} else { // Se non sono uguali, le colonne sono diverse, allora continuiamo
+												continue;
+											}																				
+										}																	
+									}
+
+									if(flag) // Se sono uscito dal for precedente per un interruzione, vuol dire che una tabella presenta nella lista di ritorno è stata incrementata
+										continue;								
+								}
+
+							__table.addAll(__tmp); // Tutte le tabelle che non possono essere incrementate, vengono aggiunte come nuove tabelle
+
+							}
+						}
+						return __table;
+
+					case 'D':
+						long countDelete = 0;
+						for(MongoCollection <Document> source: sourceList)
+							countDelete += source.deleteMany((BsonDocument) query).getDeletedCount();
+						return countDelete;
+
+					case 'I':
+						for(MongoCollection <Document> source: sourceList)
+							source.insertMany((List <Document>) query);
+						return null;
+
+					case 'U':
+						for(MongoCollection <Document> source: sourceList)
+							source.updateMany(((ArrayList<BsonDocument>) query).get(0), ((ArrayList<BsonDocument>) query).get(1));
+						return null;
+
+					case 'R':
+						for(MongoCollection <Document> source: sourceList)
+							source.replaceOne(((ArrayList<BsonDocument>) query).get(0), Document.parse((((ArrayList<BsonDocument>) query).get(1).toJson())));
+						return null;
+
+					default: 
+						return null;
+				}
+
+			}	
+	
 	}
 	'''
 	return s
 }
-		
 
-		
-
-		
 		def undeployFlyFunctionOnCloud(FlyFunctionCall call) {
 			var env = (call.environment.right as DeclarationObject).features.get(0).value_s
 			if(deployed_function.get(env).contains(call.target.name)){
@@ -1420,27 +2036,314 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						
 					}
+					case "nosql":{
+						if (dec.onCloud && (dec.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure")) {
+							var resourceGroup = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
+							var instance = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
+							var database = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s
+							var collection = ((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s
+							return '''
+							MongoClient «dec.name»Client = new MongoClient(new MongoClientURI(«dec.environment.get(0).name».getDBEndpointNoSQL("«resourceGroup»", "«instance»")));
+							MongoCollection <Document> «dec.name» = «dec.name»Client.getDatabase("«database»").getCollection("«collection»");
+							'''
+						} else {
+							var database = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s
+							var collection = ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s								
+							if((dec.right as DeclarationObject).features.size() < 5) {
+								return '''
+								if(!(new File("log4j.properties").exists())) {
+									try {
+										Properties props = new Properties();
+										props.put("log4j.rootLogger", "INFO, stdout");
+										props.put("log4j.appender.stdout", "org.apache.log4j.ConsoleAppender");
+										props.put("log4j.appender.stdout.Target", "System.out");
+										props.put("log4j.appender.stdout.layout", "org.apache.log4j.PatternLayout");
+										props.put("log4j.appender.stdout.layout.ConversionPattern", "%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n");
+										FileOutputStream outputStream = new FileOutputStream("log4j.properties");
+										props.store(outputStream, "This is a default properties file");
+										System.out.println("Default properties file created.");
+									} catch (IOException e) {
+										System.out.println("Default properties file not created.");
+										e.printStackTrace();
+									}
+								}
+
+								PropertyConfigurator.configure("log4j.properties");
+
+								MongoClient «dec.name»Client = new MongoClient(new MongoClientURI(«IF 
+								((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s.nullOrEmpty
+								»«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_f.name
+								»«ELSE
+								»"«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»"«ENDIF»));
+								MongoCollection <Document> «dec.name» = «dec.name»Client.getDatabase("«database»").getCollection("«collection»");
+								'''
+							} else {
+								return '''
+								PropertyConfigurator.configure(«IF 
+								((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s.nullOrEmpty
+								»«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_f.name
+								»«ELSE
+								»"«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»"«ENDIF»);
+
+								MongoClient «dec.name»Client = new MongoClient(new MongoClientURI(«IF 
+								((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s.nullOrEmpty
+								»«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_f.name
+								»«ELSE
+								»"«((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»"«ENDIF»));
+								MongoCollection <Document> «dec.name» = «dec.name»Client.getDatabase("«database»").getCollection("«collection»");
+								'''
+							}
+						}
+					}
 					case "query":{
 						var query_type = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
-						if (query_type.equals("update")){
-							typeSystem.get(scope).put(dec.name, "int")
-						}else if (query_type.equals("value")){
-							typeSystem.get(scope).put(dec.name, "Table")
-						} else {
-							typeSystem.get(scope).put(dec.name, "Table")
-						}
+						var connectionVar = (((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration).right as DeclarationObject
+						var typeDatabase = (connectionVar.features.get(0) as DeclarationFeature).value_s
 						var connection = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name
-						return '''
-						PreparedStatement «dec.name» = «connection».prepareStatement(
-						«IF 
+						if(typeDatabase.equals("sql")) {
+							if(query_type.equals("update")){
+								typeSystem.get(scope).put(dec.name, "int")
+							} else if(query_type.equals("value")){
+								typeSystem.get(scope).put(dec.name, "Table")
+							} else {
+								typeSystem.get(scope).put(dec.name, "Table")
+							}
+							return '''
+							PreparedStatement «dec.name» = «connection».prepareStatement(
+							«IF
 							((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
-						»
-						«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
-						« ELSE » 
+							»
+							«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
+							« ELSE » 
 							"«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»"
-						«ENDIF»
-						);
-						'''	 
+							«ENDIF»
+							);
+							'''
+						} else if(typeDatabase.equals("nosql")) {
+							if(query_type.equals("select")){
+								typeSystem.get(scope).put(dec.name, "List <Table>")
+							} else if(query_type.equals("delete")){
+								typeSystem.get(scope).put(dec.name, "long")
+							}
+							if(query_type.equals("insert")) {
+								if(((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty) {
+									if((((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f as VariableDeclaration).right instanceof DeclarationObject) {
+										var variables = (((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f as VariableDeclaration).right as DeclarationObject
+										if(variables.features.get(0).value_s.equals("file")) {
+											if((dec.right as DeclarationObject).features.size() == 6) {
+												var from = ((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s
+												var to = ((dec.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s
+												return '''
+												List <Document> «dec.name» = new ArrayList <Document> ();
+												try (CSVReader ___CSVReader = new CSVReader(new FileReader(
+														«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»))) {
+													List <String[]> ___listOfArrayString = ___CSVReader.readAll();
+													String[] ___nosqlfeatures = ___listOfArrayString.get(0);
+													for(int ___indexOfReadingFromCSV = «from» + 1; ___indexOfReadingFromCSV < «to» + 1; ++___indexOfReadingFromCSV) {
+														Document ___dcmnt_tmp = new Document();
+														for(int ___indexOfReadingFromCSV2 = 0; ___indexOfReadingFromCSV2 < ___nosqlfeatures.length; ___indexOfReadingFromCSV2++) 
+															___dcmnt_tmp.append(___nosqlfeatures[___indexOfReadingFromCSV2], 
+																___listOfArrayString.get(___indexOfReadingFromCSV)[___indexOfReadingFromCSV2]); 
+														«dec.name».add(___dcmnt_tmp);
+													}
+												}
+												'''
+											} else {
+												return '''
+												List <Document> «dec.name» = new ArrayList <Document> ();
+												try (CSVReader ___CSVReader = new CSVReader(new FileReader(
+														«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»))) {
+													List <String[]> ___listOfArrayString = ___CSVReader.readAll();
+													String[] ___nosqlfeatures = ___listOfArrayString.get(0);
+													for(int ___indexOfReadingFromCSV = 1; ___indexOfReadingFromCSV < ___listOfArrayString.size(); ++___indexOfReadingFromCSV) {
+														Document ___dcmnt_tmp = new Document();
+														for(int ___indexOfReadingFromCSV2 = 0; ___indexOfReadingFromCSV2 < ___nosqlfeatures.length; ___indexOfReadingFromCSV2++) 
+															___dcmnt_tmp.append(___nosqlfeatures[___indexOfReadingFromCSV2], 
+																___listOfArrayString.get(___indexOfReadingFromCSV)[___indexOfReadingFromCSV2]); 
+														«dec.name».add(___dcmnt_tmp);
+													}
+												}
+												'''
+											}
+										} 
+									} else {
+										return '''
+										String ___«dec.name»Statement = «((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»;
+										if(___«dec.name»Statement.charAt(0) != '[')
+											___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
+
+										org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
+										List <Document> «dec.name» = new ArrayList <Document> ();
+
+										for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
+											«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
+										'''
+									}
+								} else {
+									return '''
+									String ___«dec.name»Statement = "«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»";
+									if(___«dec.name»Statement.charAt(0) != '[')
+										___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
+
+									org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
+									List <Document> «dec.name» = new ArrayList <Document> ();
+
+									for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
+										«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
+									'''
+								}
+							} else if(query_type.equals("update") || query_type.equals("replace")) { 
+								if((dec.right as DeclarationObject).features.size() == 5)
+									return '''
+									BsonDocument «dec.name»_filter = Document.parse(«IF 
+									((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
+									»
+									«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
+									« ELSE » 
+									"«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+
+									BsonDocument «dec.name» = Document.parse(«IF 
+									((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s.nullOrEmpty
+									»
+									«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_f.name»
+									« ELSE » 
+									"«((dec.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+									'''	
+							} else {
+								return '''
+								BsonDocument «dec.name» = Document.parse(«IF 
+								((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
+								»
+								«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
+								« ELSE » 
+								"«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+								'''
+							}
+						}
+					}
+					case "distributed-query": {
+						var query_type = ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
+						if(query_type.equals("select")) {
+							typeSystem.get(scope).put(dec.name, "List <Table>")
+						} else if(query_type.equals("delete")) {
+							typeSystem.get(scope).put(dec.name, "long")
+						}
+						if(query_type.equals("select") || query_type.equals("delete")) {
+							var ret = ''''''
+							ret += '''
+							BsonDocument «dec.name» = Document.parse(«IF 
+								((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.nullOrEmpty
+							»
+							«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»
+							« ELSE » 
+								"«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+
+							ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+							'''
+							for(i : 3 ..< (dec.right as DeclarationObject).features.size)					
+								ret += '''
+								«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+								'''
+							return ret;
+						} else if(query_type.equals("insert")) {
+							var ret = ''''''
+							if(((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.nullOrEmpty) {
+								if((((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration).right instanceof DeclarationObject) {
+									var variables = (((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration).right as DeclarationObject
+									if(variables.features.get(0).value_s.equals("file")) {
+										ret += '''
+										List <Document> «dec.name» = new ArrayList <Document> ();
+										try (CSVReader ___CSVReader = new CSVReader(new FileReader(
+												«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»))) {
+											List <String[]> ___listOfArrayString = ___CSVReader.readAll();
+											String[] ___nosqlfeatures = ___listOfArrayString.get(0);
+											for(int ___indexOfReadingFromCSV = 1; ___indexOfReadingFromCSV < ___listOfArrayString.size(); ++___indexOfReadingFromCSV) {
+												Document ___dcmnt_tmp = new Document();
+												for(int ___indexOfReadingFromCSV2 = 0; ___indexOfReadingFromCSV2 < ___nosqlfeatures.length; ___indexOfReadingFromCSV2++) 
+													___dcmnt_tmp.append(___nosqlfeatures[___indexOfReadingFromCSV2], 
+															___listOfArrayString.get(___indexOfReadingFromCSV)[___indexOfReadingFromCSV2]); 
+												«dec.name».add(___dcmnt_tmp);
+											}
+										}
+
+										ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+										'''
+															
+										for(i : 3 ..< (dec.right as DeclarationObject).features.size)					
+											ret += '''
+											«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+											'''
+										return ret;
+									}
+								} else {
+									ret += '''
+									String ___«dec.name»Statement = «((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»;
+									if(___«dec.name»Statement.charAt(0) != '[')
+										___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
+
+									org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
+									List <Document> «dec.name» = new ArrayList <Document> ();
+
+									for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
+										«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
+
+									ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+									'''
+														
+									for(i : 3 ..< (dec.right as DeclarationObject).features.size)					
+										ret += '''
+										«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+										'''
+									return ret;
+								}
+							} else {
+								ret += '''
+								String ___«dec.name»Statement = "«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»";
+								if(___«dec.name»Statement.charAt(0) != '[')
+									___«dec.name»Statement = "[" + ___«dec.name»Statement + "]";
+														org.json.JSONArray ___«dec.name»JsonArrayQuery = new org.json.JSONArray(___«dec.name»Statement);
+								List <Document> «dec.name» = new ArrayList <Document> ();
+
+								for(int ___indexForJsonArray = 0; ___indexForJsonArray < ___«dec.name»JsonArrayQuery.length(); ___indexForJsonArray++) 
+									«dec.name».add(Document.parse(___«dec.name»JsonArrayQuery.get(___indexForJsonArray).toString()));
+
+								ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+								'''
+																						
+								for(i : 3 ..< (dec.right as DeclarationObject).features.size)					
+									ret += '''
+									«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+									'''
+								return ret;
+							}
+						} else {
+							var ret = ''''''
+							ret += '''
+							BsonDocument «dec.name»_filter = Document.parse(«IF 
+								((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.nullOrEmpty
+							»
+							«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f.name»
+							« ELSE » 
+								"«((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+
+							BsonDocument «dec.name» = Document.parse(«IF 
+								((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.nullOrEmpty
+							»
+							«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_f.name»
+							« ELSE » 
+								"«((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s.replace("\\$", "$")»"«ENDIF»).toBsonDocument(BsonDocument.class, MongoClient.getDefaultCodecRegistry());
+							ArrayList <MongoCollection <Document>> «dec.name»Source = new ArrayList <> ();
+							ArrayList <BsonDocument> «dec.name»Pair = new ArrayList <> ();
+							«dec.name»Pair.add(«dec.name»_filter);
+							«dec.name»Pair.add(«dec.name»);
+							'''
+																													
+							for(i : 4 ..< (dec.right as DeclarationObject).features.size)					
+								ret += '''
+								«dec.name»Source.add(«((dec.right as DeclarationObject).features.get(i) as DeclarationFeature).value_f.name»);
+								'''
+							return ret;	
+						} 
 					}
 					default: {
 						return ''''''
@@ -1645,6 +2548,49 @@ class FLYGenerator extends AbstractGenerator {
 							return '''
 								String «dec.name» = (String) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
 							'''
+						} else if ((dec.right as CastExpression).type.equals("Array")) {
+							
+						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
+								typeSystem.get(scope).put(dec.name,"Matrix_Object")
+								return '''
+									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
+									JsonObject jsonObject = new JsonParser().parse(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»).getAsJsonObject();
+									
+									int n_rows = jsonObject.get("rows").getAsInt();
+									int n_cols = jsonObject.get("cols").getAsInt();
+									int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+									String matrixType = jsonObject.get("matrixType").getAsString();
+											        
+									//convert matrix json string to matrix in java
+									String valuesJson = jsonObject.getAsJsonArray("values").toString();
+									String extractedItems = valuesJson.replaceAll("\\[", "").replaceAll("\\]", "").replaceAll("\\s", "");
+									String[] items = extractedItems.split(",");	  
+																				
+									Object [][] «dec.name» = new Object[n_rows][n_cols];
+									if(matrixType.equals("Double")){
+										int itemCount = 0;
+										for (int j=0; j < n_rows; j++) {
+											for(int k=0; k< n_cols; k++) {
+												«dec.name»[j][k] = Double.parseDouble(items[itemCount++]);
+											}
+										}
+									}else if (matrixType.equals("Integer")){
+										int itemCount = 0;
+										for (int j=0; j < n_rows; j++) {
+											for(int k=0; k< n_cols; k++) {
+												«dec.name»[j][k] = Integer.parseInt(items[itemCount++]);
+											}
+										}
+									}else {
+										//it is a string
+										int itemCount = 0;
+										for (int j=0; j < n_rows; j++) {
+											for(int k=0; k< n_cols; k++) {
+												x[j][k] = items[itemCount++];
+											}
+										}
+									}
+								'''
 						} else if ((dec.right as CastExpression).type.equals("ArrayList")) {
 							typeSystem.get(scope).put(dec.name, "ArrayList")
 							return '''
@@ -1652,12 +2598,28 @@ class FLYGenerator extends AbstractGenerator {
 								ArrayList «dec.name» = new Gson().fromJson(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»,new TypeToken<ArrayList<Object>>() {}.getType());
 							'''
 						}
-					}else if((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp") ){ 
-						typeSystem.get(scope).put(dec.name, valuateArithmeticExpression((dec.right as CastExpression),scope))
-						println( typeSystem.get(scope))
-						return '''
-							«valuateArithmeticExpression((dec.right as CastExpression),scope)» «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)») «((dec.right as CastExpression).target as ChannelReceive).target.name».take(); 
-						'''
+					}else if((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp") ){
+						if ((dec.right as CastExpression).type.equals("Array")) {
+							
+						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
+								typeSystem.get(scope).put(dec.name,"Matrix_Object")
+								return '''
+									«valuateArithmeticExpression((dec.right as CastExpression),scope)»[][] «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)»[][]) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
+									if(«dec.name».getClass().getSimpleName().equals("Integer[][]")){
+						 				«dec.name» = (Integer[][]) «dec.name»;
+									} else if(«dec.name».getClass().getSimpleName().equals("Double[][]")){
+						 				«dec.name» = (Double[][]) «dec.name»;
+									} else if(x.getClass().getSimpleName().equals("String[][]")){
+						 				«dec.name» = (String[][]) «dec.name»;
+									}
+								'''
+						} else {
+							typeSystem.get(scope).put(dec.name, valuateArithmeticExpression((dec.right as CastExpression),scope))
+							println( typeSystem.get(scope))
+							return '''
+								«valuateArithmeticExpression((dec.right as CastExpression),scope)» «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)») «((dec.right as CastExpression).target as ChannelReceive).target.name».take(); 
+							'''
+						} 
 					}
 				}else { // if is an Expression to evaluate
 			
@@ -1993,6 +2955,18 @@ class FLYGenerator extends AbstractGenerator {
 				__fly_environment.get("«dec_name»").put("count","«count»");	
 			'''
 		}
+			else if (env.contains("k8s")) {
+			var language =  ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
+			var nreplicas = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_t
+			var nparallels= ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_t
+			return '''
+				__fly_environment.put("«dec_name»", new HashMap<String,Object>());
+				__fly_environment.get("«dec_name»").put("language","«language»");
+				__fly_environment.get("«dec_name»").put("nreplicas",«nreplicas»);
+				__fly_environment.get("«dec_name»").put("nparallels",«nparallels»);
+			'''
+			}
+		
 		
 	}
 
@@ -2030,6 +3004,70 @@ class FLYGenerator extends AbstractGenerator {
 			filter[(right as DeclarationObject).features.get(0).value_s.equals("smp")].get(0)
 		var local = local_env.name
 		switch env {
+			case "k8s":{			
+			if(!right_env.contains("smp")){
+			return '''
+			Jedis jedis = new Jedis(svcIP.toString(),6379);
+			for(int __i=0;__i< (Integer)__fly_environment.get("cloud").get("nthread");__i++){ 
+			«dec.name».put(jedis.rpop("queue:jobs"));
+			}
+			estimation();
+			Runtime.getRuntime().exec("chmod +x src-gen/kubernetes_undeploy.sh");
+								ProcessBuilder __processBuilder_undeploy_kubernetes= new ProcessBuilder("/bin/bash", "-c", "src-gen/kubernetes_undeploy.sh");
+								Map<String, String> __env_undeploy_kubernetes = __processBuilder_undeploy_kubernetes.environment();
+													
+								__processBuilder_undeploy_kubernetes.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+								__processBuilder_undeploy_kubernetes.redirectError(ProcessBuilder.Redirect.INHERIT);
+								String __path_env_undeploy_kubernetes = __env_undeploy_kubernetes.get("PATH");
+								if (!__path_env_undeploy_kubernetes.contains("/usr/local/bin")) {
+														 __env_undeploy_kubernetes.put("PATH", __path_env_undeploy_kubernetes+":/usr/local/bin");
+													}
+													Process __p_undeploy_kubernetes;
+													try {
+														__p_undeploy_kubernetes= __processBuilder_undeploy_kubernetes.start();
+														__p_undeploy_kubernetes.waitFor();
+														if(__p_undeploy_kubernetes.exitValue()!=0){
+															System.out.println("Error in kubernetes_undeploy.sh ");
+															System.exit(1);
+														}
+													} catch (Exception e) {
+														e.printStackTrace();
+													}
+						}		
+			'''
+			
+			}
+			else
+			return '''
+			Jedis jedis = new Jedis(svcIP.toString(),30014);
+			for(int __i=0;__i< (Integer)__fly_environment.get("local").get("nthread");__i++){ 
+			«dec.name».put(jedis.rpop("queue:jobs"));
+			}
+			estimation();
+			Runtime.getRuntime().exec("chmod +x src-gen/kubernetes_undeploy.sh");
+					ProcessBuilder __processBuilder_undeploy_kubernetes= new ProcessBuilder("/bin/bash", "-c", "src-gen/kubernetes_undeploy.sh");
+					Map<String, String> __env_undeploy_kubernetes = __processBuilder_undeploy_kubernetes.environment();
+										
+					__processBuilder_undeploy_kubernetes.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+					__processBuilder_undeploy_kubernetes.redirectError(ProcessBuilder.Redirect.INHERIT);
+					String __path_env_undeploy_kubernetes = __env_undeploy_kubernetes.get("PATH");
+					if (!__path_env_undeploy_kubernetes.contains("/usr/local/bin")) {
+											 __env_undeploy_kubernetes.put("PATH", __path_env_undeploy_kubernetes+":/usr/local/bin");
+										}
+										Process __p_undeploy_kubernetes;
+										try {
+											__p_undeploy_kubernetes= __processBuilder_undeploy_kubernetes.start();
+											__p_undeploy_kubernetes.waitFor();
+											if(__p_undeploy_kubernetes.exitValue()!=0){
+												System.out.println("Error in kubernetes_undeploy.sh ");
+												System.exit(1);
+											}
+										} catch (Exception e) {
+											e.printStackTrace();
+										}
+			}		
+			'''
+			}
 			case "aws":
 			return '''
 				__sqs_«env_name».createQueue(new CreateQueueRequest("«dec.name»-"+__id_execution));
@@ -2307,6 +3345,9 @@ class FLYGenerator extends AbstractGenerator {
 				if (expression.type.equals("Object")) {
 					return '''((HashMap<Object,Object>) «generateArithmeticExpression(expression.target,scope)»)'''
 				}
+				if (expression.type.equals("Matrix")) {
+					return '''«generateArithmeticExpression(expression.target,scope)»'''
+				}
 			} else { // parsing
 				if (expression.type.equals("Integer")) {
 					return '''Integer.parseInt( «generateArithmeticExpression(expression.target,scope)».toString())'''
@@ -2411,19 +3452,68 @@ class FLYGenerator extends AbstractGenerator {
 				case "query":{
 					if(expression.feature.equals("execute")){
 						var queryType = (expression.target.right as DeclarationObject).features.get(1).value_s
-						if (queryType.equals("update")){
-							return '''«(expression.target as VariableDeclaration).name».executeUpdate();'''
-						}else if (queryType.equals("value")){
-							return '''Table.read().db(
+						var connection = (((expression.target.right as DeclarationObject).features.get(2) as DeclarationFeature).value_f as VariableDeclaration)
+						var databaseType = (connection.right as DeclarationObject).features.get(0).value_s
+						if(databaseType.equals("sql")) {
+							if(queryType.equals("update")) {
+								return '''
+								«(expression.target as VariableDeclaration).name».executeUpdate();'''
+							} else if(queryType.equals("value")) {
+								return '''
+								Table.read().db(
 									«(expression.target as VariableDeclaration).name».executeQuery()
 									).printAll().replaceAll("[^\\d.]+|\\.(?!\\d)", "");'''
-						} else {
-							return '''Table.read().db(
+							} else {
+								return '''
+								Table.read().db(
 									«(expression.target as VariableDeclaration).name».executeQuery()
 									);'''
+							}
+						} else if(databaseType.equals("nosql")) {
+							if(queryType.equals("select")) {
+								return '''
+									__generateTableFromNoSQLQuery(«connection.name».find(«expression.target.name»).cursor());'''
+							} else if(queryType.equals("delete")) {
+								return '''
+								«connection.name».deleteMany(«expression.target.name»).getDeletedCount();'''
+							} else if(queryType.equals("insert")) {
+								return '''
+								«connection.name».insertMany(«expression.target.name»);'''
+							} else if(queryType.equals("update")) {
+								return '''
+								«connection.name».updateMany(«expression.target.name»_filter, «expression.target.name»);'''
+							} else if(queryType.equals("replace")) {
+								return '''
+								«connection.name».replaceOne(«expression.target.name»_filter, Document.parse(«expression.target.name».toJson()));'''
+							}
 						}
-					}
-					
+					}					
+				}
+				case "distributed-query": {
+					if(expression.feature.equals("execute")) {
+						var queryType = (expression.target.right as DeclarationObject).features.get(1).value_s
+						if(queryType.equals("select")) {
+							return '''
+							(List <Table>) __executeDistributedQuery('S', «expression.target.name», «expression.target.name»Source);
+							'''
+						} else if(queryType.equals("delete")) {
+							return '''
+							(long) __executeDistributedQuery('D', «expression.target.name», «expression.target.name»Source);
+							'''				
+						} else if(queryType.equals("insert")) {
+							return '''
+							__executeDistributedQuery('I', «expression.target.name», «expression.target.name»Source);
+							'''
+						} else if(queryType.equals("update")) {
+							return '''
+							__executeDistributedQuery('U', «expression.target.name»Pair, «expression.target.name»Source);
+							'''
+						} else if(queryType.equals("replace")) {
+							return '''
+							__executeDistributedQuery('R', «expression.target.name»Pair, «expression.target.name»Source);
+							'''
+						}
+					}				
 				}
 				case "dataframe":{
 					if(expression.feature.equals("exportHeader")){
@@ -3083,6 +4173,32 @@ class FLYGenerator extends AbstractGenerator {
 					}
 				'''
 			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) != null &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).equals("List <Table>")) {
+				s+='''
+				final int __numThread = (Integer) __fly_environment.get("«call.environment.name»").get("nthread");
+				ArrayList <ArrayList <Table>> __list_data_«call.target.name» = new ArrayList<> ();
+				for(int __i = 0; __i < __numThread; ++__i)
+					__list_data_«call.target.name».add(new ArrayList <Table> ());
+				for(int __j = 0; __j < «generateArithmeticExpression((call.input as FunctionInput).f_index,scope)».size(); ++__j) {
+					Table ___table = «generateArithmeticExpression((call.input as FunctionInput).f_index,scope)».get(__j);
+					for(int __i = 0; __i < __numThread; ++__i) 
+						__list_data_«call.target.name».get(__i).add(___table.emptyCopy());
+					for(int __i = 0; __i < ___table.rowCount(); ++__i)
+						__list_data_«call.target.name».get(__i % __numThread).get(__j).addRow(__i, ___table);
+				}
+				for(int __i = 0; __i < __numThread; ++__i) {
+				final ArrayList <Table> __tables = __list_data_«call.target.name».get(__i);
+				Future<Object> __f = __thread_pool_«call.environment.name».submit(new Callable<Object>() {
+					public Object call() throws Exception {
+						Object __ret = «call.target.name»(__tables);
+						return __ret;
+					}
+				});
+				«call.target.name»_«func_ID»_return.add(__f);
+				}
+				'''
+			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
 				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
 					null &&
 				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
@@ -3639,13 +4755,16 @@ class FLYGenerator extends AbstractGenerator {
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
 							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+							String matrixType_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
+							matrixType_«func_ID» = matrixType_«func_ID».substring(0, matrixType_«func_ID».indexOf("["));
+										
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 								int __n_rows_«func_ID» =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
 								if(__rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» ){
 									__n_rows_«func_ID»++;
 								}
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"values\":[");
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType_«func_ID»+"\",\"values\":[");
 								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows_«func_ID»;__j++){
 									for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
@@ -3682,6 +4801,8 @@ class FLYGenerator extends AbstractGenerator {
 								int __current_col_«(call.input.f_index as VariableLiteral).variable.name» = 0;
 								int __cols = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
 								int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+								String matrixType = «(call.input.f_index as VariableLiteral).variable.name».getClass().getComponentType().getSimpleName();
+								matrixType = matrixType.substring(0, matrixType.indexOf("["));
 								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 									int __n_cols =  __cols/__num_proc_«call.target.name»_«func_ID»;
@@ -3689,7 +4810,7 @@ class FLYGenerator extends AbstractGenerator {
 										__n_cols++;
 									}
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"values\":[");
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"matrixType\":\""+matrixType+"\",\"values\":[");
 									for(int __j = 0; __j<__rows;__j++){
 										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»+__n_cols;__z++){
 											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
@@ -3740,7 +4861,7 @@ class FLYGenerator extends AbstractGenerator {
 		'''
 		
 		if(!async){ 
-			ret+='''
+			ret+='''				
 				int __messagges_«call.target.name»_«func_ID» = 0;
 				while(__messagges_«call.target.name»_«func_ID»!=__num_proc_«call.target.name»_«func_ID») {
 					__termination_«call.target.name»_ch_«func_termination_counter».poll();
@@ -4070,6 +5191,7 @@ class FLYGenerator extends AbstractGenerator {
 	def generateChannelSend(ChannelSend send, String scope) {
 		var env = (((send.target.environment.get(0).right as DeclarationObject).features.get(0)) as DeclarationFeature).value_s
 		var env_name = send.target.environment.get(0).name
+		println("test channel send " + send.expression)
 		switch env {
 			case "smp":
 				return '''«(send.target as VariableDeclaration).name».add(«generateArithmeticExpression(send.expression,scope)»)'''
@@ -4223,8 +5345,25 @@ class FLYGenerator extends AbstractGenerator {
 							«ENDIF»
 						}
 					'''
-				
-			}else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).contains("Array")){
+			
+			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).equals("List <Table>")) {
+				var name = (object as VariableLiteral).variable.name;
+				(indexes.indices.get(0) as VariableDeclaration).typeobject='var'
+				var index_name = (indexes.indices.get(0) as VariableDeclaration).name
+				typeSystem.get(scope).put(index_name, "Table");
+				return '''
+				for(Table «index_name» : «name») {
+					«IF body instanceof BlockExpression»
+						«FOR exp : body.expressions »
+							«generateExpression(exp,scope)»
+						«ENDFOR»
+					«ELSE»
+						«generateExpression(body,scope)»
+					«ENDIF»
+				}
+				'''
+								
+			} else if(typeSystem.get(scope).get((object as VariableLiteral).variable.name).contains("Array")){
 					var name = (object as VariableLiteral).variable.name;
 				
 					return '''
@@ -4297,7 +5436,7 @@ class FLYGenerator extends AbstractGenerator {
 			if (assignment.value instanceof CastExpression &&
 				((assignment.value as CastExpression).target instanceof ChannelReceive)) {
 				if (!(((assignment.value as CastExpression).target as ChannelReceive).target.environment.
-					get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")) { // aws environment
+					get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")) { // cloud environment
 					if ((assignment.value as CastExpression).type.equals("Integer")) {
 						return '''
 							«generateArithmeticExpression(assignment.feature,scope)» «assignment.op» Integer.parseInt(«((assignment.value as CastExpression).target as ChannelReceive).target.name».take().toString());
@@ -4554,44 +5693,44 @@ class FLYGenerator extends AbstractGenerator {
 			return "Double"
 		} else if (exp instanceof VariableLiteral) {
 			val variable = exp.variable
-		if (variable.typeobject.equals("var")) {
-			if (variable.right instanceof DeclarationObject) {
-				var type = (variable.right as DeclarationObject).features.get(0).value_s
-				switch (type) {
-					case "dataframe": {
-						return "Table"
+			if (variable.typeobject.equals("var") || variable.typeobject.equals("const")) {
+				if (variable.right instanceof DeclarationObject) {
+					var type = (variable.right as DeclarationObject).features.get(0).value_s
+					switch (type) {
+						case "dataframe": {
+							return "Table"
+						}
+						case "channel":{
+							return "channel"
+						}
+						case "random":{
+							return "Random"
+						}
+						case "file":{
+							if((variable.right as DeclarationObject).features.get(1).value_s != null){
+								var path = (variable.right as DeclarationObject).features.get(1).value_s.split("/")
+								var filename = path.get(path.length-1)
+								if (filename.split(".").length != 2)
+									return "String[]"
+								else
+									return "File"
+							}else
+							return "File"
+							
+						}
+						default: {
+							return "variable"
+						}
 					}
-					case "channel":{
-						return "channel"
-					}
-					case "random":{
-						return "Random"
-					}
-					case "file":{
-						if((variable.right as DeclarationObject).features.get(1).value_s != null){
-							var path = (variable.right as DeclarationObject).features.get(1).value_s.split("/")
-							var filename = path.get(path.length-1)
-							if (filename.split(".").length != 2)
-								return "String[]"
-							else
-								return "File"
-						}else
-						return "File"
-						
-					}
-					default: {
-						return "variable"
-					}
+				} else if (variable.right instanceof NameObjectDef) {
+					return "HashMap"
+				} else if (variable.right instanceof ArithmeticExpression) {
+					return valuateArithmeticExpression(variable.right as ArithmeticExpression, scope)
+				}else{
+					return typeSystem.get(scope).get(variable.name) // if it's a parameter of a FunctionDefinition
 				}
-			} else if (variable.right instanceof NameObjectDef) {
-				return "HashMap"
-			} else if (variable.right instanceof ArithmeticExpression) {
-				return valuateArithmeticExpression(variable.right as ArithmeticExpression, scope)
-			}else{
-				return typeSystem.get(scope).get(variable.name) // if it's a parameter of a FunctionDefinition
 			}
-		}
-		return "variable"
+			return "variable"
 		} else if (exp instanceof NameObject) {
 			return typeSystem.get(scope).get(exp.name.name + "." + exp.value)
 		} else if (exp instanceof IndexObject) {
@@ -4685,12 +5824,29 @@ class FLYGenerator extends AbstractGenerator {
 						}
 					} else if (type.equals("query")){
 						var queryType = (exp.target.right as DeclarationObject).features.get(1).value_s
-						if (queryType.equals("update")){
-							return "int"
-						} else if(queryType.equals("value")){
-							return "String"
+						var typeDatabase = (((exp.target.right as DeclarationObject)
+								.features.get(2).value_f as VariableDeclaration).right as DeclarationObject).features.get(0).value_s
+						if(typeDatabase.equals("sql")) {
+							if(queryType.equals("update")){
+								return "int"
+							} else if(queryType.equals("value")){
+								return "String"
+							} else {
+								return "Table"
+							}
 						} else {
-							return "Table"
+							if(queryType.equals("select")){
+								return "List <Table>"
+							} else {
+								return "long"
+							}
+						}
+					} else if(type.equals("distributed-query")) {						
+						var queryType = (exp.target.right as DeclarationObject).features.get(1).value_s
+						if(queryType.equals("select")){
+							return "List <Table>"
+						} else {
+							return "long"
 						}
 					}
 				} else if (exp.feature.equals("split")) { 
@@ -4750,6 +5906,17 @@ class FLYGenerator extends AbstractGenerator {
 			filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]
 		){
 			if ((env.right as DeclarationObject).features.get(0).value_s.equals("azure"))
+				return true
+		}
+		return false
+	}
+
+	
+	def Boolean isK8s(){
+			for(VariableDeclaration env: res.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]
+		){
+			if ((env.right as DeclarationObject).features.get(0).value_s.equals("k8s") || (env.right as DeclarationObject).features.get(0).value_s.equals("k8s-azure"))
 				return true
 		}
 		return false
