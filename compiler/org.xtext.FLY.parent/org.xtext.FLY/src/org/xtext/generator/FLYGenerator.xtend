@@ -839,17 +839,8 @@ class FLYGenerator extends AbstractGenerator {
 			static HashMap<String,HashMap<String,Integer>> __fly_async_invocation_id = new HashMap<String,HashMap<String,Integer>>();
 			static final String __environment = "smp";
 			static long  __id_execution =  System.currentTimeMillis();
-			«FOR element : (resource.allContents.toIterable.filter(Expression))»
-				«IF element instanceof VariableDeclaration»
-					«IF element.right instanceof DeclarationObject 
-						&& ( (element.right as DeclarationObject).features.get(0).value_s.equals("channel") || list_environment.contains((element.right as DeclarationObject).features.get(0).value_s) )»
-						«generateVariableDeclaration(element,"main")»
-					«ENDIF»
-				«ENDIF»
-				«IF element instanceof ConstantDeclaration»
-					«generateConstantDeclaration(element,"main")»	
-				«ENDIF»
-			«ENDFOR»
+			static LinkedTransferQueue<Object> ch = new LinkedTransferQueue<Object>();
+		
 			«FOR element : resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
 				static boolean __wait_on_termination_«element.target.name» = true;
 			«ENDFOR»
