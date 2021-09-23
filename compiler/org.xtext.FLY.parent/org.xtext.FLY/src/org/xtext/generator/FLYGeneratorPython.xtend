@@ -113,11 +113,16 @@ class FLYGeneratorPython extends AbstractGenerator {
 				 nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(7) as DeclarationFeature).value_t
 				 nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(7) as DeclarationFeature).value_t
 				}
+				case "aws":
+				{
+				 nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(6) as DeclarationFeature).value_t
+				 nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(6) as DeclarationFeature).value_t
+				}
 				case "smp":
 				{
 				language = (environment.right as DeclarationObject).features.get(2).value_s
-				 nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(1) as DeclarationFeature).value_t
-				 nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(1) as DeclarationFeature).value_t
+				 nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(2) as DeclarationFeature).value_t
+				 nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(2) as DeclarationFeature).value_t
 				}
 				}
 				
@@ -1306,6 +1311,10 @@ __index+=1
 		   		K8sDeploy(resource,name,false)
 		   	else if(right_env.contains("azure"))
 		   		K8sAzureDeploy(resource,name,false)
+		   	else if(right_env.contains("aws")){
+		   		K8sAWSDeploy(resource,name,false)
+		   		
+		   	}
 		   }
 		   default: this.env+" not supported"
   		}
@@ -1557,6 +1566,78 @@ __index+=1
 			rm -f python.yaml temp.yml template.yaml Dockerfile kubernetes_deploy.sh main.py  int-svc.yaml
 	
 	'''
+	def CharSequence K8sAWSDeploy(Resource resource, String name, boolean local){
+	'''
+	#!/bin/bash
+	
+	echo "checking if Docker is on and fine ..."
+	docker info > /dev/null 2>&1
+	
+	if [ $? -eq 0 ]; then
+		echo "Docker is on :) continuing..."
+	else
+	     echo "Docker doesn't responding... :("
+	     exit 1
+	fi
+	
+	
+	echo "checking if Kubernetes is on and fine ..."
+	aws eks update-kubeconfig --name Fly
+	kubectl cluster-info > /dev/null 2>&1 #Da rivedere in caso il cluster non sia in locale
+	
+	if [ $? -eq 0 ]; then
+		echo "Kube says hello :) continuing..."
+	else
+	     echo "Kube has something wrong :("
+	     exit 1
+	fi
+	echo "launching Redis deployment..."
+	cd src-gen/
+	echo "«generateExtK8Service(resource)»" > ext-svc.yaml
+	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-pod.yaml
+	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-service.yaml
+	kubectl apply -f ext-svc.yaml
+		
+	if [ $? -eq 0 ]; then
+		echo "Redis says hello :) continuing..."
+	else
+		    echo "Redis has something wrong :("
+		    exit 1
+	fi
+	echo "Entering in the Python env"
+	echo "Generating Python code..."
+	echo "«generateBodyPy(root.body,root.parameters,name,env, local)»
+	
+	«FOR fd:functionCalled.values()»
+		
+	«generatePyExpression(fd, name, local)»
+	
+	«ENDFOR»
+	" > main.py
+	
+	echo "Python file created"
+	echo "Building and pushing the flying image"
+		    
+		    echo "it's the moment:"
+		    
+			export completions=«nreplicas»
+			export parallelism=«nparallels»
+			export registryName=«registryName»
+			
+			( echo "cat <<EOF >python.yaml";
+			  cat template.yaml;
+			  echo "EOF";
+			) >temp.yml
+			. temp.yml
+			cat python.yaml
+			
+			kubectl apply -f python.yaml
+			echo "We are Flying!! :)"
+			kubectl wait --for=condition=complete --timeout=120s -f python.yaml
+			kubectl logs job/fly-job
+			rm -f python.yaml temp.yml template.yaml Dockerfile kubernetes_deploy.sh main.py ext-svc.yaml
+	'''
+	}
 	def CharSequence K8sAzureDeploy(Resource resource, String name, boolean local)
 	'''
 	#!/bin/bash
