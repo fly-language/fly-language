@@ -126,7 +126,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 				case "aws":
 				{
 				nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(5) as DeclarationFeature).value_t
-				nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(6) as DeclarationFeature).value_t	
+				nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(5) as DeclarationFeature).value_t	
 				}
 			}
 
@@ -1657,7 +1657,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 		def CharSequence K8sAWSDeploy(Resource resource){
 	'''
 	#!/bin/bash
-	aws eks update-kubeconfig --name Fly
 	«isK8sOk(resource)»
 	echo "launching Redis deployment..."
 	cd src-gen/		
@@ -1678,7 +1677,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 		
 	    echo "Js file created"
 	    echo "Building and pushing the flying image"
-	    az acr build --registry «registryName» --image fly_node .
+		aws eks update-kubeconfig --name Fly
 	    
 	    echo "it's the moment:"
 	    
