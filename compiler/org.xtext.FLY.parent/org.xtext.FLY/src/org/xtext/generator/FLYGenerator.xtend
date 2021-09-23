@@ -111,6 +111,10 @@ class FLYGenerator extends AbstractGenerator {
 							language = ((element.environment.environment.get(0).right as DeclarationObject).features.get(6) as DeclarationFeature).value_s
 							
 							}
+							else if(right_env.contains("aws")){
+							language = ((element.environment.environment.get(0).right as DeclarationObject).features.get(5) as DeclarationFeature).value_s
+								
+							}
 							else{
 							language = ((element.environment.environment.get(0).right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
 							
