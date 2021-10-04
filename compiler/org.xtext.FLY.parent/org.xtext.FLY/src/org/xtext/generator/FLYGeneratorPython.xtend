@@ -1325,7 +1325,7 @@ __index+=1
 		}
 		
 	}
-
+}
 	def generatePyBlockExpression(BlockExpression block, String scope, boolean local) {
 		'''
 		«FOR exp : block.expressions»

@@ -395,7 +395,10 @@ class FLYGeneratorJs extends AbstractGenerator {
 					«ENDIF»
 					
 				«ENDIF»
+								«ENDIF»
+				
 		'''
+		
 	}
 	
 	def generateConstantDefinition(ConstantDeclaration exp,String scope) {
