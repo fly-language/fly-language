@@ -260,7 +260,7 @@ CastExpression returns ArithmeticExpression:
 ;
 
 Type:
-	'String' | 'Integer' | 'Date' | 'Dat' | 'Object'  | 'Double' | 'Matrix' | 'ArrayList'
+	'String' | 'Integer' | 'Date' | 'Dat' | 'Object'  | 'Double' | 'Matrix' | 'ArrayList' | 'Array'
 ;
 
 

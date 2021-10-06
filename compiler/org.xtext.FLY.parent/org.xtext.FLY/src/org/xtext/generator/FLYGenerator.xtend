@@ -1971,14 +1971,6 @@ class FLYGenerator extends AbstractGenerator {
 				return s
 			} else if(dec.right instanceof ArrayDefinition){
 				var type_decl = (dec.right as ArrayDefinition).type
-				/*var real_type = ""
-				if(type_decl.equals("Integer")){
-					real_type = "int"
-				}else if(type_decl.equals("Double")){
-					real_type = "double"
-				}else if(type_decl.equals("String")){
-					real_type = "String"
-				}*/
 				if((dec.right as ArrayDefinition).indexes.length==1){ //mono-dimensional
 					typeSystem.get(scope).put(dec.name, "Array_"+type_decl)
 					var array_len = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(0).value,scope)
@@ -1999,8 +1991,6 @@ class FLYGenerator extends AbstractGenerator {
 					var s = '''«type_decl»[][][] «dec.name» = new «type_decl»[«row»][«col»][«dep»];'''
 					return s
 				}
-				
-				
 			}else if(dec.right instanceof ArrayInit){
 			
 				if(((dec.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
@@ -2149,7 +2139,36 @@ class FLYGenerator extends AbstractGenerator {
 								String «dec.name» = (String) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
 							'''
 						} else if ((dec.right as CastExpression).type.equals("Array")) {
-							
+								typeSystem.get(scope).put(dec.name,"Array_Object")
+								return '''
+									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
+									JsonObject jsonObject = new JsonParser().parse(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»).getAsJsonObject();
+									
+									int arr_length = jsonObject.get("length").getAsInt();
+									int subarrayIndex = jsonObject.get("subarrayIndex").getAsInt();
+									String arrayType = jsonObject.get("arrayType").getAsString();
+									
+									//convert array json string to array in java
+									String valuesJson = jsonObject.getAsJsonArray("values").toString();
+									String extractedItems = valuesJson.replaceAll("\\[", "").replaceAll("\\]", "").replaceAll("\\s", ""); //TO make it more efficient
+									String[] items = extractedItems.split(",");
+									
+									Object [] «dec.name» = new Object[arr_length];
+									if(arrayType.equals("float") || arrayType.equals("number")){
+										for (int j=0; j < arr_length; j++) {
+											«dec.name»[j] = Double.parseDouble(items[j]);
+										}
+									}else if (arrayType.equals("int")){
+										for (int j=0; j < arr_length; j++) {
+											«dec.name»[j] = Integer.parseInt(items[j]);
+										}
+									}else if (arrayType.equals("str") || arrayType.equals("string")){
+										for (int j=0; j < arr_length; j++) {
+											«dec.name»[j] = items[j].replaceAll("\"","");
+										}
+									}
+									
+									'''
 						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
 								typeSystem.get(scope).put(dec.name,"Matrix_Object")
 								return '''
@@ -2186,7 +2205,7 @@ class FLYGenerator extends AbstractGenerator {
 										int itemCount = 0;
 										for (int j=0; j < n_rows; j++) {
 											for(int k=0; k< n_cols; k++) {
-												x[j][k] = items[itemCount++];
+												«dec.name»[j][k] = items[itemCount++].replaceAll("\"","");
 											}
 										}
 									}
@@ -2200,7 +2219,17 @@ class FLYGenerator extends AbstractGenerator {
 						}
 					}else if((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp") ){
 						if ((dec.right as CastExpression).type.equals("Array")) {
-							
+								typeSystem.get(scope).put(dec.name,"Array_Object")
+								return '''
+									«valuateArithmeticExpression((dec.right as CastExpression),scope)»[] «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)»[]) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
+									if(«dec.name».getClass().getSimpleName().equals("Integer[]")){
+						 				«dec.name» = (Integer[]) «dec.name»;
+									} else if(«dec.name».getClass().getSimpleName().equals("Double[]")){
+						 				«dec.name» = (Double[]) «dec.name»;
+									} else if(x.getClass().getSimpleName().equals("String[]")){
+						 				«dec.name» = (String[]) «dec.name»;
+									}
+								'''
 						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
 								typeSystem.get(scope).put(dec.name,"Matrix_Object")
 								return '''
@@ -2255,14 +2284,6 @@ class FLYGenerator extends AbstractGenerator {
 				return s			
 		} else if(dec.right instanceof ArrayDefinition){
 			var type_decl = (dec.right as ArrayDefinition).type
-				/*var real_type = ""
-				if(type_decl.equals("Integer")){
-					real_type = "int"
-				}else if(type_decl.equals("Double")){
-					real_type = "double"
-				}else if(type_decl.equals("String")){
-					real_type = "String"
-				}*/
 				if((dec.right as ArrayDefinition).indexes.length==1){ //mono-dimensional
 					typeSystem.get(scope).put(dec.name, "Array_"+type_decl)
 					var array_len = generateArithmeticExpression((dec.right as ArrayDefinition).indexes.get(0).value,scope)
@@ -2874,6 +2895,9 @@ class FLYGenerator extends AbstractGenerator {
 				}
 				if (expression.type.equals("Object")) {
 					return '''((HashMap<Object,Object>) «generateArithmeticExpression(expression.target,scope)»)'''
+				}
+				if (expression.type.equals("Array")) {
+					return '''«generateArithmeticExpression(expression.target,scope)»'''
 				}
 				if (expression.type.equals("Matrix")) {
 					return '''«generateArithmeticExpression(expression.target,scope)»'''
@@ -3940,15 +3964,17 @@ class FLYGenerator extends AbstractGenerator {
 							   s += '''
 								int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«call.environment.name»").get("nthread");
 								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-								int __arr_length = «(call.input.f_index as VariableLiteral).variable.name».length;
+								int __arr_length_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+								
+								if ( __arr_length_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __arr_length_«func_ID»;
 								
 								int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
 								int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
 								int offset = 0;
 								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-									dimPortions[__i] = (__arr_length / __num_proc_«call.target.name»_«func_ID») +
-										((__i < (__arr_length % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
+									dimPortions[__i] = (__arr_length_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+										((__i < (__arr_length_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
 									displ[__i] = offset;								
 									offset += dimPortions[__i];
 
@@ -3973,7 +3999,9 @@ class FLYGenerator extends AbstractGenerator {
 								s+='''
 									int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«call.environment.name»").get("nthread");
 									ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-									int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+									int  __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+									
+									if ( __rows_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __rows_«func_ID»;
 									
 									int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
 									int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
@@ -3981,8 +4009,8 @@ class FLYGenerator extends AbstractGenerator {
 									
 									for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 
-										dimPortions[__i] = (__rows / __num_proc_«call.target.name»_«func_ID») +
-											((__i < (__rows % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
+										dimPortions[__i] = ( __rows_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+											((__i < ( __rows_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
 										displ[__i] = offset;
 										offset += dimPortions[__i];
 										
@@ -4020,8 +4048,8 @@ class FLYGenerator extends AbstractGenerator {
 							s+='''
 								int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«call.environment.name»").get("nthread");
 								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-								int __cols = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
-								int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+								int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
+								int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
 								
 								int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
 								int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
@@ -4029,8 +4057,8 @@ class FLYGenerator extends AbstractGenerator {
 								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 								
-									dimPortions[__i] = (__cols / __num_proc_«call.target.name»_«func_ID») +
-										((__i < (__cols % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
+									dimPortions[__i] = (__cols_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+										((__i < (__cols_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
 									displ[__i] = offset;
 									offset += dimPortions[__i];
 									
@@ -4041,9 +4069,9 @@ class FLYGenerator extends AbstractGenerator {
 										)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
 														.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
 															typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-														)»[__rows][dimPortions[__i]];
+														)»[__rows_«func_ID»][dimPortions[__i]];
 									
-									for (int i = 0; i < __rows; i++) {
+									for (int i = 0; i < __rows_«func_ID»; i++) {
 										for (int j = 0, k = displ[__i]; j < dimPortions[__i]; j++, k++) {
 											subMatrix[i][j] = «(call.input.f_index as VariableLiteral).variable.name»[i][k];
 										}
@@ -4330,21 +4358,35 @@ class FLYGenerator extends AbstractGenerator {
 					ret+='''
 						int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«cred»").get("nthread");
 						ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-						int __arr_length = «(call.input.f_index as VariableLiteral).variable.name».length;
+						int __arr_length_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+						
+						if ( __arr_length_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __arr_length_«func_ID»;
 						
 						int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
 						int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
 						int offset = 0;
 						
 						for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-							dimPortions[__i] = (__arr_length / __num_proc_«call.target.name»_«func_ID») +
-								((__i < (__arr_length % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
+							dimPortions[__i] = (__arr_length_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+								((__i < (__arr_length_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
 							displ[__i] = offset;								
 							offset += dimPortions[__i];
 
 							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-							String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ[__i], displ[__i]+dimPortions[__i] ));
-							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"myArrayPortion\":"+myArrayPortionString+"}");
+							«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+								String[] arrayPortion = Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ[__i], displ[__i]+dimPortions[__i]);
+								String myArrayPortionString = "[";
+								for (int x=0; x < arrayPortion.length; x++) {
+									if ( x < arrayPortion.length-1){
+										myArrayPortionString += "\""+arrayPortion[x]+"\",";
+									}else{
+										myArrayPortionString += "\""+arrayPortion[x]+"\"]";
+									 }
+								}
+							«ELSE»
+								String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ[__i], displ[__i]+dimPortions[__i] ));
+							«ENDIF»
+							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"length\":"+dimPortions[__i]+",\"subarrayIndex\":"+__i+",\"myArrayPortion\":"+myArrayPortionString+"}");
 						}
 						for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 							final int __i_f = __i;
@@ -4372,6 +4414,8 @@ class FLYGenerator extends AbstractGenerator {
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
 							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+							
+							if ( __rows_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __rows_«func_ID»;
 										
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 								int __n_rows_«func_ID» =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
@@ -4382,7 +4426,11 @@ class FLYGenerator extends AbstractGenerator {
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows_«func_ID»+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"values\":[");
 								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows_«func_ID»;__j++){
 									for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
-										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+										«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":\""+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"\"},");
+										«ELSE»
+											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+										«ENDIF»
 									}
 									if(__j == __current_row_«(call.input.f_index as VariableLiteral).variable.name» + __n_rows_«func_ID»-1) {
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
@@ -4414,21 +4462,23 @@ class FLYGenerator extends AbstractGenerator {
 								int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«call.environment.name»").get("nthread");
 								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 								int __current_col_«(call.input.f_index as VariableLiteral).variable.name» = 0;
-								int __cols = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
-								int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+								int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
+								int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+								
+								if ( __cols_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __cols_«func_ID»;
 								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-									int __n_cols =  __cols/__num_proc_«call.target.name»_«func_ID»;
-									if(__cols%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __cols%__num_proc_«call.target.name»_«func_ID» ){
+									int __n_cols =  __cols_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
+									if(__cols_«func_ID»%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __cols_«func_ID»%__num_proc_«call.target.name»_«func_ID» ){
 										__n_cols++;
 									}
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"values\":[");
-									for(int __j = 0; __j<__rows;__j++){
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows_«func_ID»+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"values\":[");
+									for(int __j = 0; __j<__rows_«func_ID»;__j++){
 										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»+__n_cols;__z++){
 											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
 										}
-										if(__j == __rows-1) {
+										if(__j == __rows_«func_ID»-1) {
 											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
 											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("]}");
 										}
@@ -5081,7 +5131,6 @@ class FLYGenerator extends AbstractGenerator {
 							}
 						'''
 					}
-
 				}
 
 			} else if (assignment.value instanceof ChannelReceive) {
