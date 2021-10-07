@@ -484,28 +484,44 @@ class FLYGeneratorJs extends AbstractGenerator {
 				__data = await __sqs.getQueueUrl({ QueueName: "«exp.target.name»-'${id}'"}).promise();
 				
 				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
+					var arrayType = ""
+					if ( typeof «generateJsArithmeticExpression(exp.expression,scope)»[0] == "number"){
+					
+					        // check if it is integer
+					        if (Number.isInteger(«generateJsArithmeticExpression(exp.expression,scope)»[0])) {
+					            arrayType = "int"
+					        }else {
+					            arrayType = "double"
+					        }
+					}
 					__params = {
 						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
 												'length': «generateJsArithmeticExpression(exp.expression,scope)».length,
-												«IF root.parameters.empty»
-													'subarrayIndex': 0,
-												«ELSE»
+												«IF !root.parameters.empty»
 													'subarrayIndex': subarrayIndex,
 												«ENDIF»
-												'arrayType': typeof «generateJsArithmeticExpression(exp.expression,scope)»[0]}),
+												'arrayType': arrayType}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSEIF  exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					var matrixType = ""
+					if ( typeof «generateJsArithmeticExpression(exp.expression,scope)»[0][0] == "number"){
+					
+					        // check if it is integer
+					        if (Number.isInteger(«generateJsArithmeticExpression(exp.expression,scope)»[0][0])) {
+					            matrixType = "int"
+					        }else {
+					            matrixType = "double"
+					        }
+					}
 					__params = {
 						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
 												'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
 												'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
-												«IF root.parameters.empty»
-													'submatrixIndex': 0,
-												«ELSE»
+												«IF !root.parameters.empty»
 													'submatrixIndex': submatrixIndex,
 												«ENDIF»
-												'matrixType': typeof «generateJsArithmeticExpression(exp.expression,scope)»[0][0]}),
+												'matrixType': matrixType}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSE»

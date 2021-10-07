@@ -2145,16 +2145,23 @@ class FLYGenerator extends AbstractGenerator {
 									JsonObject jsonObject = new JsonParser().parse(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»).getAsJsonObject();
 									
 									int arr_length = jsonObject.get("length").getAsInt();
-									int subarrayIndex = jsonObject.get("subarrayIndex").getAsInt();
+									int subarrayIndex = 0;
+									try{
+										//subarrayIndex is present only if the function invokes with arrayPortion param
+										subarrayIndex = jsonObject.get("subarrayIndex").getAsInt();
+									}catch(NullPointerException e){
+										//no subarrayIndex needed
+										subarrayIndex = -1;
+									}
 									String arrayType = jsonObject.get("arrayType").getAsString();
 									
 									//convert array json string to array in java
 									String valuesJson = jsonObject.getAsJsonArray("values").toString();
-									String extractedItems = valuesJson.replaceAll("\\[", "").replaceAll("\\]", "").replaceAll("\\s", ""); //TO make it more efficient
+									String extractedItems = valuesJson.substring(1,valuesJson.length()-1).replaceAll("\\s", "");
 									String[] items = extractedItems.split(",");
 									
 									Object [] «dec.name» = new Object[arr_length];
-									if(arrayType.equals("float") || arrayType.equals("number")){
+									if(arrayType.equals("float") || arrayType.equals("double")){
 										for (int j=0; j < arr_length; j++) {
 											«dec.name»[j] = Double.parseDouble(items[j]);
 										}
@@ -2177,7 +2184,14 @@ class FLYGenerator extends AbstractGenerator {
 									
 									int n_rows = jsonObject.get("rows").getAsInt();
 									int n_cols = jsonObject.get("cols").getAsInt();
-									int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+									int submatrixIndex = 0;
+									try{
+										//submatrixIndex is present only if the function invokes with matrixPortion param
+										submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+									}catch(NullPointerException e){
+										//no submatrixIndex needed
+										submatrixIndex = -1;
+									}
 									String matrixType = jsonObject.get("matrixType").getAsString();
 											        
 									//convert matrix json string to matrix in java
