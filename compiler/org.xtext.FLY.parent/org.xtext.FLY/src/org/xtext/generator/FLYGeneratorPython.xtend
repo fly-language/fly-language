@@ -221,7 +221,6 @@ class FLYGeneratorPython extends AbstractGenerator {
 		
 		«FOR fd:functionCalled.values()»
 			«generatePyExpression(fd, name, local)»
-			
 		«ENDFOR»	
 				
 		def main(event):
@@ -314,7 +313,14 @@ class FLYGeneratorPython extends AbstractGenerator {
 						«(exp as VariableDeclaration).name» = pd.read_json(json.dumps(data))
 						«(exp as VariableDeclaration).name» = «(exp as VariableDeclaration).name»[__columns]
 					«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-						«(exp as VariableDeclaration).name» = data[0]['myArrayPortion']
+						__«(exp as VariableDeclaration).name»_length = data[0]['length']
+						subarrayIndex = data[0]['subarrayIndex']
+						__«(exp as VariableDeclaration).name»_values = data[0]['myArrayPortion']
+						
+						«(exp as VariableDeclaration).name» = [0 for x in range(__«(exp as VariableDeclaration).name»_length)]
+						for __i in range(__«(exp as VariableDeclaration).name»_length):
+							«(exp as VariableDeclaration).name»[__i] = __«(exp as VariableDeclaration).name»_values[__i]
+							
 					«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
 						__«(exp as VariableDeclaration).name»_matrix = data[0]
 						__«(exp as VariableDeclaration).name»_rows = data[0]['rows']
@@ -353,12 +359,23 @@ class FLYGeneratorPython extends AbstractGenerator {
 				«exp.target.name».write(json.dumps(«generatePyArithmeticExpression(exp.expression, scope, local)»).encode('utf8'))
 				
 			«ELSEIF (env.contains("aws"))»
-				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
+					«exp.target.name».send_message(
+						MessageBody=json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+						'length': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+						«IF !root.parameters.empty»
+							'subarrayIndex': subarrayIndex,
+						«ENDIF»
+						'arrayType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0].__class__.__name__})
+					)
+				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
 					«exp.target.name».send_message(
 						MessageBody=json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
 						'rows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
 						'cols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
-						'submatrixIndex': submatrixIndex,
+						«IF !root.parameters.empty»
+							'submatrixIndex': submatrixIndex,
+						«ENDIF»
 						'matrixType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0][0].__class__.__name__})
 					)
 				«ELSE»
@@ -368,11 +385,21 @@ class FLYGeneratorPython extends AbstractGenerator {
 				«ENDIF»
 			«ELSEIF env=="azure"»
 				__queue_service_client = __queue_service.get_queue_client('«exp.target.name»-"${id}"')
-				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
+					__queue_service_client.send_message(json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+											'length': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+											«IF !root.parameters.empty»
+												'subarrayIndex': subarrayIndex,
+											«ENDIF»
+											'arrayType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0].__class__.__name__})
+										)
+				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
 					__queue_service_client.send_message(json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
 											'rows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
 											'cols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
-											'submatrixIndex': submatrixIndex,
+											«IF !root.parameters.empty»
+												'submatrixIndex': submatrixIndex,
+											«ENDIF»
 											'matrixType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0][0].__class__.__name__})
 										)
 				«ELSE»
@@ -410,14 +437,14 @@ class FLYGeneratorPython extends AbstractGenerator {
 					if((exp.right as ArrayDefinition).indexes.length==1){
 						var len = (exp.right as ArrayDefinition).indexes.get(0).value
 						typeSystem.get(scope).put(exp.name, "Array_"+type)
-						s += '''«exp.name» = [None] * «generatePyArithmeticExpression(len, scope, local)»'''						
+						s += '''«exp.name» = [0 for x in range(«generatePyArithmeticExpression(len, scope, local)»)] '''						
 					}else if((exp.right as ArrayDefinition).indexes.length==2){
 						var row = (exp.right as ArrayDefinition).indexes.get(0).value
 						var col = (exp.right as ArrayDefinition).indexes.get(1).value
 						typeSystem.get(scope).put(exp.name, "Matrix_"+type+"_"+generatePyArithmeticExpression(col, scope, local))
 						s += '''«exp.name» = [[0 for x in range(«generatePyArithmeticExpression(col, scope, local)»)] for y in range(«generatePyArithmeticExpression(row, scope, local)»)]'''
 						
-					}else if((exp.right as ArrayDefinition).indexes.length==3){
+					}else if((exp.right as ArrayDefinition).indexes.length==3){ // TO FIX
 						var row = (exp.right as ArrayDefinition).indexes.get(0).value
 						var col = (exp.right as ArrayDefinition).indexes.get(1).value
 						var dep = (exp.right as ArrayDefinition).indexes.get(2).value
@@ -1081,9 +1108,9 @@ class FLYGeneratorPython extends AbstractGenerator {
 			}
 			if (assignment.feature_obj instanceof IndexObject) {
 				if (typeSystem.get(scope).get((assignment.feature_obj as IndexObject).name.name).contains("Array")) {
-					return '''
-					«(assignment.feature_obj as IndexObject).name.name»[«generatePyArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(0).value, scope, local)»] = «generatePyArithmeticExpression((assignment.value), scope, local)»
-					'''
+					if ((assignment.feature_obj as IndexObject).indexes.length == 1) {
+						return '''«generatePyArithmeticExpression(assignment.feature_obj,scope, local)» =  «generatePyArithmeticExpression(assignment.value,scope, local)»'''	
+					}
 				} else if (typeSystem.get(scope).get((assignment.feature_obj as IndexObject).name.name).contains("Matrix")) {
 					if ((assignment.feature_obj as IndexObject).indexes.length == 2) {
 						return '''«generatePyArithmeticExpression(assignment.feature_obj,scope, local)» =  «generatePyArithmeticExpression(assignment.value,scope, local)»'''	
@@ -1394,6 +1421,7 @@ class FLYGeneratorPython extends AbstractGenerator {
 			case "Dat": return '''pd.read_json(«generatePyArithmeticExpression(cast.target, scope, local)»)'''
 			case "Object": return '''«generatePyArithmeticExpression(cast.target, scope, local)»'''
 			case "Double": return '''float(«generatePyArithmeticExpression(cast.target, scope, local)»)'''
+			case "Array": return '''«generatePyArithmeticExpression(cast.target, scope, local)»'''
 			case "Matrix": return '''«generatePyArithmeticExpression(cast.target, scope, local)»'''
 		}	
 	}
