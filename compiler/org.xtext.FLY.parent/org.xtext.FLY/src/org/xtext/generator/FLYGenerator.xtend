@@ -331,7 +331,8 @@ class FLYGenerator extends AbstractGenerator {
 					}
 					System.out.println("Done");
 					
-					«element.environment.environment.get(0).name».buildFLYProjectOnVMCluster();
+					String mainClass = "«name»";
+					«element.environment.environment.get(0).name».buildFLYProjectOnVMCluster(mainClass);
 					
 					System.out.print("\n\u27A4 Waiting for building project on VM CLuster to complete...");
 					if(vmsCreatedCount != vmCount){
@@ -501,8 +502,13 @@ class FLYGenerator extends AbstractGenerator {
 						TO DO
 					'''
 			} else if(call.input.f_index instanceof VariableLiteral &&
+				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")){
+					
+					
+					
+			} else if(call.input.f_index instanceof VariableLiteral &&
 				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
-					if(call.input.split.equals("row")){ 
+					if (call.input.split.equals("row")){ 
 						s+='''
 							int rows = «(call.input.f_index as VariableLiteral).variable.name».length;
 							
@@ -520,6 +526,8 @@ class FLYGenerator extends AbstractGenerator {
 							int numberOfFunctions = rows;
 							
 						'''
+					}else if (call.input.split.equals("row")){ 
+						
 					}
 			} else { // f_index is a range
 				
@@ -3629,7 +3637,6 @@ class FLYGenerator extends AbstractGenerator {
 								«IF call.isIs_then»
 									«call.then.name»();
 								«ENDIF»
-
 								«IF call.isIsAsync && call.isIs_thenall»
 									if(__count.getAndIncrement()==__numThread){
 										__asyncTermination.put("Termination");
@@ -3991,7 +3998,6 @@ class FLYGenerator extends AbstractGenerator {
 										((__i < (__arr_length_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
 									displ[__i] = offset;								
 									offset += dimPortions[__i];
-
 									final int i = __i;
 									Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 												
@@ -4022,7 +4028,6 @@ class FLYGenerator extends AbstractGenerator {
 									int offset = 0;
 									
 									for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-
 										dimPortions[__i] = ( __rows_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
 											((__i < ( __rows_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
 										displ[__i] = offset;
