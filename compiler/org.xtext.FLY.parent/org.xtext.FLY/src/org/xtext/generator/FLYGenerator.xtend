@@ -372,7 +372,21 @@ class FLYGenerator extends AbstractGenerator {
 					filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
 						«IF !(el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")»
 							System.out.print("\n\u27A4 Waiting for FLY execution to complete...");
-							while («el.name».size() != numberOfFunctions);
+							if(vmsCreatedCount != vmCount){
+								«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
+									while («element.environment.environment.get(0).name».getQueueLength(«element.environment.environment.get(0).name»_terminationQueue) != ( (vmCount*3)+vmsCreatedCount));
+								«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
+									while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(«element.environment.environment.get(0).name»_terminationQueue)
+																.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != ( (vmCount*3)+vmsCreatedCount));
+								«ENDIF»
+							} else {
+								«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
+									while («element.environment.environment.get(0).name».getQueueLength(«element.environment.environment.get(0).name»_terminationQueue) != (vmCount*3));
+								«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
+									while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(«element.environment.environment.get(0).name»_terminationQueue)
+																.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount*3));
+								«ENDIF»
+							}
 							__wait_on_«el.name» = false;
 							System.out.println("Done");
 						«ENDIF»
