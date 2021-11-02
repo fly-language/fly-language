@@ -2959,6 +2959,7 @@ class FLYGenerator extends AbstractGenerator {
 				__fly_environment.get("«dec_name»").put("language","«language»");
 				__fly_environment.get("«dec_name»").put("nreplicas",«nreplicas»);
 				__fly_environment.get("«dec_name»").put("nparallels",«nparallels»);
+				}
 			'''
 			}
 		
