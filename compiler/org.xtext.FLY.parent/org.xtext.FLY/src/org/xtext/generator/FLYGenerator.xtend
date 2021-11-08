@@ -557,18 +557,29 @@ class FLYGenerator extends AbstractGenerator {
 				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
 					if (call.input.split.equals("row")){ 
 						s+='''
-							int rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+							int vmCount_«func_ID» = «vmCount»;
+							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
+							ArrayList<String> portionInputs = new ArrayList<String>();
 							
-							for(int i=0;i<«vmCount»;i++){
-								int __n_rows =  rows/«vmCount»;
-								if(rows% «vmCount» !=0 && i< rows%«vmCount» ){
-									__n_rows++;
-								}
-								dimPortions[i]= __n_rows;
-								displ[i] = offset;
-								offset += dimPortions[i];
+							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+																				
+							if ( __rows_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __rows_«func_ID»;
+														
+							int[] dimPortions = new int[vmCount_«func_ID»]; 
+							int[] displ = new int[vmCount_«func_ID»]; 
+							int offset = 0;
+														
+							for(int __i=0;__i<vmCount_«func_ID»;__i++){
+								dimPortions[__i] = (__rows_«func_ID» / vmCount_«func_ID») + ((__i < (__rows_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
+								displ[__i] = offset;								
+								offset += dimPortions[__i];
+															
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixSize\":"+dimPortions[__i]+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ[__i]+"}");							
+								
+								portionInputs.add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));
 							}
-							int numberOfFunctions = «vmCount»;
+							int numberOfFunctions = vmCount_«func_ID»;
 						'''
 					}else if (call.input.split.equals("col")){ 
 						s+='''
@@ -2274,21 +2285,21 @@ class FLYGenerator extends AbstractGenerator {
 									String[] items = extractedItems.split(",");	  
 																				
 									Object [][] «dec.name» = new Object[n_rows][n_cols];
-									if(matrixType.equals("float") || matrixType.equals("number")){
+									if(matrixType.equals("float") || matrixType.equals("double") || matrixType.equals("Double")){
 										int itemCount = 0;
 										for (int j=0; j < n_rows; j++) {
 											for(int k=0; k< n_cols; k++) {
 												«dec.name»[j][k] = Double.parseDouble(items[itemCount++]);
 											}
 										}
-									}else if (matrixType.equals("int")){
+									}else if (matrixType.equals("int") || matrixType.equals("Integer")){
 										int itemCount = 0;
 										for (int j=0; j < n_rows; j++) {
 											for(int k=0; k< n_cols; k++) {
 												«dec.name»[j][k] = Integer.parseInt(items[itemCount++]);
 											} 
 										}
-									}else if (matrixType.equals("str") || matrixType.equals("string")){
+									}else if (matrixType.equals("str") || matrixType.equals("string") || matrixType.equals("String")){
 										//it is a string
 										int itemCount = 0;
 										for (int j=0; j < n_rows; j++) {
@@ -2992,7 +3003,9 @@ class FLYGenerator extends AbstractGenerator {
 				}
 				if (expression.type.equals("Matrix")) {
 					//called only in case of Array on channel on AWS
-					return '''«generateArithmeticExpression(expression.target,scope)»'''
+					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+" , \"rows\":"+«generateArithmeticExpression(expression.target,scope)».length+" , \"cols\":"+«generateArithmeticExpression(expression.target,scope)»[0].length+" , "
+											+ "\"matrixType\":"+(«generateArithmeticExpression(expression.target,scope)».getClass().getSimpleName()).substring(0, («generateArithmeticExpression(expression.target,scope)».getClass().getSimpleName()).length() - 4)+" }").toString())
+												'''
 				}
 			} else { // parsing
 				if (expression.type.equals("Integer")) {
@@ -3491,28 +3504,48 @@ class FLYGenerator extends AbstractGenerator {
 				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
 					if(call.input.split.equals("row")){ 
 						s+='''
-						int __num_proc_«call.target.name»_«func_ID»= Runtime.getRuntime().availableProcessors();
-						ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-						int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
-						int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
-						for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-							int __n_rows =  __rows/__num_proc_«call.target.name»_«func_ID»;
-							if(__rows%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows%__num_proc_«call.target.name»_«func_ID» ){
-								__n_rows++;
+							JsonObject jsonObject = new JsonParser().parse(myObjectInput).getAsJsonObject();
+							jsonObject = jsonObject.getAsJsonArray("data").get(0).getAsJsonObject();
+							
+							int submatrixSize = jsonObject.get("submatrixSize").getAsInt();
+							int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+							int submatrixDisplacement = jsonObject.get("submatrixDisplacement").getAsInt();
+							
+							int numThreadsToUse = numThreadsAvailable;
+							if (submatrixSize < numThreadsAvailable) numThreadsToUse = submatrixSize;
+							
+							//Get the type of element inside the matrix and generate the submatrix
+							«typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
+								.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
+								typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
+								)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
+												.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
+													typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
+												)»[submatrixSize][];
+																
+							for (int i = 0, k = submatrixDisplacement; k < (submatrixDisplacement + submatrixSize); i++, k++) {
+								subMatrix[i] = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
+																							.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
+																								typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
+																							)»[«(call.input.f_index as VariableLiteral).variable.name»[i].length];
+							    System.arraycopy(«(call.input.f_index as VariableLiteral).variable.name»[k], 0, subMatrix[i], 0, subMatrix[i].length);
 							}
-							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"values\":[");
-							for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows;__j++){
-								for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
-								}
-								if(__j == __current_row_«(call.input.f_index as VariableLiteral).variable.name» + __n_rows-1) {
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("]}");
-								}
+							
+							for(int __i=0;__i< numThreadsToUse;__i++){
+								final int i = __i;
+								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
+											
+									public Object call() throws Exception {
+										
+										Object __ret = «call.target.name»(subMatrix);
+										«IF call.isIs_then»
+											«call.then.name»();
+										«ENDIF»					
+										return __ret;
+									}
+								});
+								«call.target.name»_«func_ID»_return.add(_f);
 							}
-							__current_row_«(call.input.f_index as VariableLiteral).variable.name»+=__n_rows;
-						}
 						'''
 					}
 			} else { // f_index is a range
