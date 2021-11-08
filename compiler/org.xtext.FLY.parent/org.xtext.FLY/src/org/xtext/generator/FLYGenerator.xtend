@@ -562,6 +562,7 @@ class FLYGenerator extends AbstractGenerator {
 							ArrayList<String> portionInputs = new ArrayList<String>();
 							
 							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+							int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
 																				
 							if ( __rows_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __rows_«func_ID»;
 														
@@ -575,7 +576,7 @@ class FLYGenerator extends AbstractGenerator {
 								offset += dimPortions[__i];
 															
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixSize\":"+dimPortions[__i]+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ[__i]+"}");							
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+dimPortions[__i]+",\"submatrixCols\":"+__cols_«func_ID»+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ[__i]+"}");							
 								
 								portionInputs.add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));
 							}
@@ -583,18 +584,31 @@ class FLYGenerator extends AbstractGenerator {
 						'''
 					}else if (call.input.split.equals("col")){ 
 						s+='''
-							int cols = «(call.input.f_index as VariableLiteral).variable.name».[0].length;
+							int vmCount_«func_ID» = «vmCount»;
+							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
+							ArrayList<String> portionInputs = new ArrayList<String>();
 							
-							for(int i=0;i<«vmCount»;i++){
-								int __n_cols =  cols/«vmCount»;
-								if(cols% «vmCount» !=0 && i< cols%«vmCount» ){
-									__n_cols++;
-								}
-								dimPortions[i]= __n_cols;
-								displ[i] = offset;
-								offset += dimPortions[i];
+							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+							int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
+							
+							if ( __cols_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __cols_«func_ID»;
+														
+							int[] dimPortions = new int[vmCount_«func_ID»]; 
+							int[] displ = new int[vmCount_«func_ID»]; 
+							int offset = 0;
+															
+							for(int __i=0;__i<vmCount_«func_ID»;__i++){
+								dimPortions[__i] = (__cols_«func_ID» / vmCount_«func_ID») +
+																		((__i < (__cols_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
+								displ[__i] = offset;
+								offset += dimPortions[__i];
+								
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+__rows_«func_ID»+",\"submatrixCols\":"+dimPortions[__i]+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ[__i]+"}");							
+								
+								portionInputs.add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));						
 							}
-							int numberOfFunctions = «vmCount»;		
+							int numberOfFunctions = vmCount_«func_ID»;
 						'''
 					}
 			} else { // f_index is a range
@@ -3499,7 +3513,6 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						
 					'''
-					
 			} else if(call.input.f_index instanceof VariableLiteral &&
 				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
 					if(call.input.split.equals("row")){ 
@@ -3507,12 +3520,13 @@ class FLYGenerator extends AbstractGenerator {
 							JsonObject jsonObject = new JsonParser().parse(myObjectInput).getAsJsonObject();
 							jsonObject = jsonObject.getAsJsonArray("data").get(0).getAsJsonObject();
 							
-							int submatrixSize = jsonObject.get("submatrixSize").getAsInt();
+							int submatrixRows = jsonObject.get("submatrixRows").getAsInt();
+							int submatrixCols = jsonObject.get("submatrixCols").getAsInt();
 							int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
 							int submatrixDisplacement = jsonObject.get("submatrixDisplacement").getAsInt();
 							
 							int numThreadsToUse = numThreadsAvailable;
-							if (submatrixSize < numThreadsAvailable) numThreadsToUse = submatrixSize;
+							if (submatrixRows < numThreadsAvailable) numThreadsToUse = submatrixRows;
 							
 							//Get the type of element inside the matrix and generate the submatrix
 							«typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
@@ -3521,14 +3535,54 @@ class FLYGenerator extends AbstractGenerator {
 								)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
 												.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
 													typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-												)»[submatrixSize][];
+												)»[submatrixRows][submatrixCols];
 																
-							for (int i = 0, k = submatrixDisplacement; k < (submatrixDisplacement + submatrixSize); i++, k++) {
-								subMatrix[i] = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-																							.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-																								typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-																							)»[«(call.input.f_index as VariableLiteral).variable.name»[i].length];
+							for (int i = 0, k = submatrixDisplacement; k < (submatrixDisplacement + submatrixRows); i++, k++) {
 							    System.arraycopy(«(call.input.f_index as VariableLiteral).variable.name»[k], 0, subMatrix[i], 0, subMatrix[i].length);
+							}
+							
+							for(int __i=0;__i< numThreadsToUse;__i++){
+								final int i = __i;
+								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
+											
+									public Object call() throws Exception {
+										
+										Object __ret = «call.target.name»(subMatrix);
+										«IF call.isIs_then»
+											«call.then.name»();
+										«ENDIF»					
+										return __ret;
+									}
+								});
+								«call.target.name»_«func_ID»_return.add(_f);
+							}
+						'''
+					}else if(call.input.split.equals("col")){
+						s+='''
+							JsonObject jsonObject = new JsonParser().parse(myObjectInput).getAsJsonObject();
+							jsonObject = jsonObject.getAsJsonArray("data").get(0).getAsJsonObject();
+							
+							int submatrixRows = jsonObject.get("submatrixRows").getAsInt();
+							int submatrixCols = jsonObject.get("submatrixCols").getAsInt();
+							int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+							int submatrixDisplacement = jsonObject.get("submatrixDisplacement").getAsInt();
+							
+							int numThreadsToUse = numThreadsAvailable;
+							if (submatrixCols < numThreadsAvailable) numThreadsToUse = submatrixCols;
+							
+							//Get the type of element inside the matrix and generate the submatrix
+							«typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
+								.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
+								typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
+								)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
+												.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
+													typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
+												)»[submatrixRows][submatrixCols];
+							
+							for (int i = 0; i < submatrixRows; i++){								
+								for (int j = 0, k = submatrixDisplacement; j < submatrixCols; j++, k++) {
+									subMatrix[i][j] = «(call.input.f_index as VariableLiteral).variable.name»[i][k];
+							    }
 							}
 							
 							for(int __i=0;__i< numThreadsToUse;__i++){
@@ -4005,6 +4059,8 @@ class FLYGenerator extends AbstractGenerator {
 								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 								int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
 								int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+								
+								if ( __cols_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __cols_«func_ID»;
 								
 								int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
 								int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
