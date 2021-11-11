@@ -392,9 +392,18 @@ class FLYGenerator extends AbstractGenerator {
 						«ENDIF»
 					«ENDFOR»
 					
-					«IF element.isIs_thenall»
-						«element.thenall.name»();
-					«ENDIF»
+					//Check for execution errors
+					String err = «element.environment.environment.get(0).name».checkForExecutionErrors(numberOfFunctions);
+					if (err != null) {
+						//Print the error within each VM
+						System.out.println("The execution failed with the following errors in each VM:");
+						System.out.println(err);
+					}else {
+						//No execution errors
+						«IF element.isIs_thenall»
+							«element.thenall.name»();
+						«ENDIF»
+					}
 					
 					«element.environment.environment.get(0).name».deleteResourcesAllocated();
 
