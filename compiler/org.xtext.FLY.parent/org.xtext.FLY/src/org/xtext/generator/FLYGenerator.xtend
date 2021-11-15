@@ -266,17 +266,6 @@ class FLYGenerator extends AbstractGenerator {
 					«setEnvironmentDeclarationInfo(element)»
 				«ENDFOR»
 				
-				«FOR element : (resource.allContents.toIterable.filter(Expression))»
-					«IF element instanceof VariableDeclaration»
-						«IF element.typeobject !== null &&  element.right !== null 
-							&& !(element.right instanceof DeclarationObject && list_environment.contains((element.right as DeclarationObject).features.get(0).value_s))
-							&& !(element.right instanceof DeclarationObject && (element.right as DeclarationObject).features.get(0).value_s.equals("channel"))
-							&& !(element.right instanceof CastExpression && ( ((element.right as CastExpression).target instanceof ChannelReceive)))»
-							 «generateVariableDeclaration(element,"main")»
-						«ENDIF»
-					«ENDIF»
-				«ENDFOR»
-				
 				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
 				filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
 					String «element.name»_terminationQueue = "ch-termination-"+__id_execution;
@@ -306,6 +295,12 @@ class FLYGenerator extends AbstractGenerator {
 				int vmCount = Integer.parseInt((String) __fly_environment.get("«vm_cluster_name»").get("count"));
 				
 				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall)»
+				
+					«FOR el : (resource.allContents.toIterable.filter(VariableDeclaration))»
+						«IF ((el as VariableDeclaration).name.equals((element.input.f_index as VariableLiteral).variable.name))»
+							«generateVariableDeclaration(el,"main")»
+						«ENDIF»
+					«ENDFOR»
 
 					«element.environment.environment.get(0).name».zipAndUploadCurrentProject();
 					
@@ -725,6 +720,7 @@ class FLYGenerator extends AbstractGenerator {
 					
 			static HashMap<String,HashMap<String, Object>> __fly_environment = new HashMap<String,HashMap<String,Object>>();
 			static long  __id_execution;
+			static Integer myDisplacement;
 			
 			«FOR element : (resource.allContents.toIterable.filter(Expression))»
 				«IF element instanceof VariableDeclaration»
@@ -2203,8 +2199,13 @@ class FLYGenerator extends AbstractGenerator {
 					'''
 				} else {
 				 */
+				 println("1-typesystem -> "+typeSystem)
 					typeSystem.get(scope).put(dec.name,
 						valuateArithmeticExpression(dec.right as VariableFunction, scope))
+				println("2-typesystem -> "+typeSystem)
+println("3-"+valuateArithmeticExpression(dec.right as VariableFunction,scope))
+println("4-"+dec.name)
+println("5-"+generateArithmeticExpression(dec.right as VariableFunction,scope))
 					return '''
 						«valuateArithmeticExpression(dec.right as VariableFunction,scope)» «dec.name» = «generateArithmeticExpression(dec.right as VariableFunction,scope)»;
 					'''
@@ -3347,8 +3348,14 @@ class FLYGenerator extends AbstractGenerator {
 							s += ";"
 						}
 						return s
-					} else if (expression.feature.equals("numCols")){
+					} else if (expression.feature.equals("colCount")){
 						var s = expression.target.name + "[0].length"
+						if (t) {
+							s += ";"
+						}
+						return s
+					} else if (expression.feature.equals("getDisplacement")){
+						var s = filenameSingleVm + ".myDisplacement"
 						if (t) {
 							s += ";"
 						}
@@ -3501,6 +3508,7 @@ class FLYGenerator extends AbstractGenerator {
 						int subarrayLength = jsonObject.get("subarrayLength").getAsInt();
 						int subarrayIndex = jsonObject.get("subarrayIndex").getAsInt();
 						int subarrayDisplacement = jsonObject.get("subarrayDisplacement").getAsInt();
+						myDisplacement = subarrayDisplacement;
 						
 						int numThreadsToUse = numThreadsAvailable;
 						if (subarrayLength < numThreadsAvailable) numThreadsToUse = subarrayLength;
@@ -3533,6 +3541,7 @@ class FLYGenerator extends AbstractGenerator {
 							int submatrixCols = jsonObject.get("submatrixCols").getAsInt();
 							int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
 							int submatrixDisplacement = jsonObject.get("submatrixDisplacement").getAsInt();
+							myDisplacement = submatrixDisplacement;
 							
 							int numThreadsToUse = numThreadsAvailable;
 							if (submatrixRows < numThreadsAvailable) numThreadsToUse = submatrixRows;
@@ -3575,6 +3584,7 @@ class FLYGenerator extends AbstractGenerator {
 							int submatrixCols = jsonObject.get("submatrixCols").getAsInt();
 							int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
 							int submatrixDisplacement = jsonObject.get("submatrixDisplacement").getAsInt();
+							myDisplacement = submatrixDisplacement;
 							
 							int numThreadsToUse = numThreadsAvailable;
 							if (submatrixCols < numThreadsAvailable) numThreadsToUse = submatrixCols;
@@ -5547,7 +5557,8 @@ class FLYGenerator extends AbstractGenerator {
 					}
 				} else if (exp.feature.equals("split")) { 
 					return "String[]"
-				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length") || exp.feature.equals("rowCount") || exp.feature.equals("colCount")) {
+				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length") || exp.feature.equals("rowCount") || exp.feature.equals("colCount")
+					|| exp.feature.equals("getDisplacement")) {
 					return "Integer"
 				} else if (exp.feature.equals("concat") || exp.feature.equals("substring")||
 					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase")) {
