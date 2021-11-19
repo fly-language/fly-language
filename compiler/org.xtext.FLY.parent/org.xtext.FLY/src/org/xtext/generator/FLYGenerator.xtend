@@ -2250,39 +2250,24 @@ class FLYGenerator extends AbstractGenerator {
 								typeSystem.get(scope).put(dec.name,"Array_Object")
 								return '''
 									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
-									JsonObject jsonObject = new JsonParser().parse(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»).getAsJsonObject();
+									JsonObject jsonObject_«func_ID» = new JsonParser().parse(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»).getAsJsonObject();
 									
-									int arr_length = jsonObject.get("length").getAsInt();
-									int subarrayIndex = 0;
+									int arr_length_«func_ID» = jsonObject_«func_ID».get("length").getAsInt();
+									int subarrayIndex_«func_ID» = 0;
 									try{
 										//subarrayIndex is present only if the function invokes with arrayPortion param
-										subarrayIndex = jsonObject.get("subarrayIndex").getAsInt();
+										subarrayIndex_«func_ID» = jsonObject_«func_ID».get("subarrayIndex").getAsInt();
 									}catch(NullPointerException e){
 										//no subarrayIndex needed
-										subarrayIndex = -1;
+										subarrayIndex_«func_ID» = -1;
 									}
-									String arrayType = jsonObject.get("arrayType").getAsString();
+																		
+									//extract values from matrix json string
+									String valuesJson_«func_ID» = jsonObject_«func_ID».getAsJsonArray("values").toString();
+									String extractedItems_«func_ID» = valuesJson_«func_ID».substring(1,valuesJson_«func_ID».length()-1).replaceAll("\\s", "");
+									String[] items_«func_ID» = extractedItems_«func_ID».split(",");
 									
-									//convert array json string to array in java
-									String valuesJson = jsonObject.getAsJsonArray("values").toString();
-									String extractedItems = valuesJson.substring(1,valuesJson.length()-1).replaceAll("\\s", "");
-									String[] items = extractedItems.split(",");
-									
-									Object [] «dec.name» = new Object[arr_length];
-									if(arrayType.equals("float") || arrayType.equals("double") || arrayType.equals("Double")){
-										for (int j=0; j < arr_length; j++) {
-											«dec.name»[j] = Double.parseDouble(items[j]);
-										}
-									}else if (arrayType.equals("int") || arrayType.equals("Integer")){
-										for (int j=0; j < arr_length; j++) {
-											«dec.name»[j] = Integer.parseInt(items[j]);
-										}
-									}else if (arrayType.equals("str") || arrayType.equals("string") || arrayType.equals("String") ){
-										for (int j=0; j < arr_length; j++) {
-											«dec.name»[j] = items[j].replaceAll("\"","");
-										}
-									}
-									
+									//create the actual array when the type is specified
 									'''
 						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
 								typeSystem.get(scope).put(dec.name,"Matrix_Object")
@@ -2996,14 +2981,12 @@ class FLYGenerator extends AbstractGenerator {
 				}
 				if (expression.type.equals("Array")) {
 					//called only in case of Array on channel on AWS
-					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+" , \"length\":"+«generateArithmeticExpression(expression.target,scope)».length+" , "
-												+ "\"arrayType\":"+(«generateArithmeticExpression(expression.target,scope)».getClass().getSimpleName()).substring(0, («generateArithmeticExpression(expression.target,scope)».getClass().getSimpleName()).length() - 2)+" }").toString())
+					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+" , \"length\":"+«generateArithmeticExpression(expression.target,scope)».length+"}").toString())
 												'''
 				}
 				if (expression.type.equals("Matrix")) {
 					//called only in case of Array on channel on AWS
-					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+" , \"rows\":"+«generateArithmeticExpression(expression.target,scope)».length+" , \"cols\":"+«generateArithmeticExpression(expression.target,scope)»[0].length+" , "
-											+ "\"matrixType\":"+(«generateArithmeticExpression(expression.target,scope)».getClass().getSimpleName()).substring(0, («generateArithmeticExpression(expression.target,scope)».getClass().getSimpleName()).length() - 4)+" }").toString())
+					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+" , \"rows\":"+«generateArithmeticExpression(expression.target,scope)».length+" , \"cols\":"+«generateArithmeticExpression(expression.target,scope)»[0].length+"}").toString())
 												'''
 				}
 			} else { // parsing
@@ -3298,6 +3281,35 @@ class FLYGenerator extends AbstractGenerator {
 							s += ";"
 						}
 						return s
+					} else if (expression.feature.equals("setReceivedArrayType")){
+						var s = ""
+						var paramType = generateArithmeticExpression(expression.expressions.get(0),scope).toString()
+						if( paramType.contains("Integer")){
+							typeSystem.get(scope).remove((expression.target as VariableDeclaration).name)
+							typeSystem.get(scope).put(expression.target.name,"Array_Integer")
+							s += '''Integer[] «expression.target.name» = new Integer[arr_length_«func_ID»];
+								for (int j=0; j < arr_length_«func_ID»; j++) {
+									«expression.target.name»[j] = Integer.parseInt(items_«func_ID»[j]);
+								}
+								'''
+						}else if( paramType.contains("Double")){
+							typeSystem.get(scope).remove((expression.target as VariableDeclaration).name)
+							typeSystem.get(scope).put(expression.target.name,"Array_Double")
+							s += '''Double[] «expression.target.name» = new Double[arr_length_«func_ID»];
+								for (int j=0; j < arr_length_«func_ID»; j++) {
+									«expression.target.name»[j] = Double.parseDouble(items_«func_ID»[j]);
+								}
+								'''
+						}else if( paramType.contains("String")){
+							typeSystem.get(scope).remove((expression.target as VariableDeclaration).name)
+							typeSystem.get(scope).put(expression.target.name,"Array_String")
+							s += '''String[] «expression.target.name» = new String[arr_length_«func_ID»];
+								for (int j=0; j < arr_length_«func_ID»; j++) {
+									«expression.target.name»[j] = items_«func_ID»[j].replaceAll("\"","");
+								}
+								'''
+						}
+						return s
 					} else {
 						var s = expression.target.name + "." + expression.feature + "("
 						for (exp : expression.expressions) {
@@ -3393,7 +3405,7 @@ class FLYGenerator extends AbstractGenerator {
 					}
 		} else if (expression.target.right instanceof IndexObject) {
 
-					if (expression.feature.equals("deepToString")){ //matrix to string
+					if (expression.feature.equals("deepToString")){ 
 						var s = "Arrays." + expression.feature + "(" + expression.target.name + ")"
 						if (t) {
 							s += ";"
