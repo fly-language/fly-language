@@ -231,6 +231,7 @@ class FLYGenerator extends AbstractGenerator {
 				
 		static HashMap<String,HashMap<String, Object>> __fly_environment = new HashMap<String,HashMap<String,Object>>();
 		static long  __id_execution =  System.currentTimeMillis();
+		static String terminationQueue;
 		
 		«FOR element : (resource.allContents.toIterable.filter(Expression))»
 			«IF element instanceof VariableDeclaration»
@@ -254,7 +255,8 @@ class FLYGenerator extends AbstractGenerator {
 			«ENDIF»
 		«ENDFOR»
 				
-		public static void main(String[] args) throws Exception{
+		public static void main(String[] args){
+			try{
 				«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
 					«initialiseConstant(element,"main")»
 				«ENDFOR»
@@ -268,7 +270,7 @@ class FLYGenerator extends AbstractGenerator {
 				
 				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
 				filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
-					String «element.name»_terminationQueue = "ch-termination-"+__id_execution;
+					terminationQueue = "ch-termination-"+__id_execution;
 
 					«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
 						"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
@@ -276,17 +278,17 @@ class FLYGenerator extends AbstractGenerator {
 						"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
 						__id_execution+"",
 						"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»",
-						«element.name»_terminationQueue);
+						terminationQueue);
 					
 					«element.name».VMClusterInit();
-					«element.name».setupQueue(«element.name»_terminationQueue);
+					«element.name».setupQueue(terminationQueue);
 				«ENDFOR»
 				
 				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
 				filter[((right as DeclarationObject).features.get(0).value_s.equals("aws"))]»
 					__sqs_«element.name».createQueue(new CreateQueueRequest("ch-termination-"+__id_execution));
-					String «element.name»_terminationQueue = __sqs_«element.name».getQueueUrl("ch-termination-"+__id_execution).getQueueUrl();					
-					«element.name» = new AWSClient(creds, "«(element.right as DeclarationObject).features.get(4).value_s»", «element.name»_terminationQueue);
+					terminationQueue = __sqs_«element.name».getQueueUrl("ch-termination-"+__id_execution).getQueueUrl();					
+					«element.name» = new AWSClient(creds, "«(element.right as DeclarationObject).features.get(4).value_s»", terminationQueue);
 				«ENDFOR»
 								
 				String purchasingOption = (String) __fly_environment.get("«vm_cluster_name»").get("purchasing_option");
@@ -309,9 +311,9 @@ class FLYGenerator extends AbstractGenerator {
 					if ( vmsCreatedCount != 0) {
 						System.out.print("\n\u27A4 Waiting for virtual machines boot script to complete...");
 						«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-							while («element.environment.environment.get(0).name».getQueueLength(«element.environment.environment.get(0).name»_terminationQueue) != vmsCreatedCount);
+							while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != vmsCreatedCount);
 						«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(«element.environment.environment.get(0).name»_terminationQueue)
+							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
 														.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != vmsCreatedCount);
 						«ENDIF»
 						System.out.println("Done");
@@ -321,9 +323,9 @@ class FLYGenerator extends AbstractGenerator {
 						
 						System.out.print("\n\u27A4 Waiting for download project on VM CLuster to complete...");
 						«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-							while («element.environment.environment.get(0).name».getQueueLength(«element.environment.environment.get(0).name»_terminationQueue) != (vmCount+vmsCreatedCount));
+							while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount+vmsCreatedCount));
 						«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(«element.environment.environment.get(0).name»_terminationQueue)
+							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
 														.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount+vmsCreatedCount));
 						«ENDIF»
 					}
@@ -335,16 +337,16 @@ class FLYGenerator extends AbstractGenerator {
 					System.out.print("\n\u27A4 Waiting for building project on VM CLuster to complete...");
 					if(vmsCreatedCount != vmCount){
 						«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-							while («element.environment.environment.get(0).name».getQueueLength(«element.environment.environment.get(0).name»_terminationQueue) != ( (vmCount*2)+vmsCreatedCount));
+							while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != ( (vmCount*2)+vmsCreatedCount));
 						«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(«element.environment.environment.get(0).name»_terminationQueue)
+							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
 														.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != ( (vmCount*2)+vmsCreatedCount));
 						«ENDIF»
 					} else {
 						«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-							while («element.environment.environment.get(0).name».getQueueLength(«element.environment.environment.get(0).name»_terminationQueue) != (vmCount*2));
+							while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount*2));
 						«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(«element.environment.environment.get(0).name»_terminationQueue)
+							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
 														.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount*2));
 						«ENDIF»
 					}
@@ -369,16 +371,16 @@ class FLYGenerator extends AbstractGenerator {
 							System.out.print("\n\u27A4 Waiting for FLY execution to complete...");
 							if(vmsCreatedCount != vmCount){
 								«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-									while («element.environment.environment.get(0).name».getQueueLength(«element.environment.environment.get(0).name»_terminationQueue) != ( (vmCount*3)+vmsCreatedCount));
+									while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != ( (vmCount*3)+vmsCreatedCount));
 								«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-									while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(«element.environment.environment.get(0).name»_terminationQueue)
+									while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
 																.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != ( (vmCount*3)+vmsCreatedCount));
 								«ENDIF»
 							} else {
 								«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-									while («element.environment.environment.get(0).name».getQueueLength(«element.environment.environment.get(0).name»_terminationQueue) != (vmCount*3));
+									while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount*3));
 								«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-									while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(«element.environment.environment.get(0).name»_terminationQueue)
+									while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
 																.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount*3));
 								«ENDIF»
 							}
@@ -399,26 +401,30 @@ class FLYGenerator extends AbstractGenerator {
 							«element.thenall.name»();
 						«ENDIF»
 					}
-					
+				
+				}catch(Exception e){
+					e.printStackTrace();
+				}finally{
 					«element.environment.environment.get(0).name».deleteResourcesAllocated();
+					
+					«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
+					filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+						«IF (el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws")»
+						__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(terminationQueue));
+						__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(__sqs_«el.environment.get(0).name».getQueueUrl("«el.name»-"+__id_execution).getQueueUrl()));
+						«ENDIF»
+					«ENDFOR»
+					
+					«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+					filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+						&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
+						__thread_pool_«el.name».shutdown();
+					«ENDFOR»
+					
+					System.exit(0);
+				}
 
 				«ENDFOR»
-				
-				«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-					«IF (el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws")»
-					__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(«el.environment.get(0).name»_terminationQueue));
-					__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(__sqs_«el.environment.get(0).name».getQueueUrl("«el.name»-"+__id_execution).getQueueUrl()));
-					«ENDIF»
-				«ENDFOR»
-				
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
-					__thread_pool_«element.name».shutdown();
-				«ENDFOR»
-				
-				System.exit(0);
 			}
 			
 			«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
@@ -2199,13 +2205,6 @@ class FLYGenerator extends AbstractGenerator {
 					'''
 				} else {
 				 */
-				 println("1-typesystem -> "+typeSystem)
-					typeSystem.get(scope).put(dec.name,
-						valuateArithmeticExpression(dec.right as VariableFunction, scope))
-				println("2-typesystem -> "+typeSystem)
-println("3-"+valuateArithmeticExpression(dec.right as VariableFunction,scope))
-println("4-"+dec.name)
-println("5-"+generateArithmeticExpression(dec.right as VariableFunction,scope))
 					return '''
 						«valuateArithmeticExpression(dec.right as VariableFunction,scope)» «dec.name» = «generateArithmeticExpression(dec.right as VariableFunction,scope)»;
 					'''
@@ -2289,49 +2288,25 @@ println("5-"+generateArithmeticExpression(dec.right as VariableFunction,scope))
 								typeSystem.get(scope).put(dec.name,"Matrix_Object")
 								return '''
 									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
-									JsonObject jsonObject = new JsonParser().parse(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»).getAsJsonObject();
+									JsonObject jsonObject_«func_ID» = new JsonParser().parse(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»).getAsJsonObject();
 									
-									int n_rows = jsonObject.get("rows").getAsInt();
-									int n_cols = jsonObject.get("cols").getAsInt();
-									int submatrixIndex = 0;
+									int n_rows_«func_ID» = jsonObject_«func_ID».get("rows").getAsInt();
+									int n_cols_«func_ID» = jsonObject_«func_ID».get("cols").getAsInt();
+									int submatrixIndex_«func_ID» = 0;
 									try{
 										//submatrixIndex is present only if the function invokes with matrixPortion param
-										submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+										submatrixIndex_«func_ID» = jsonObject_«func_ID».get("submatrixIndex").getAsInt();
 									}catch(NullPointerException e){
 										//no submatrixIndex needed
-										submatrixIndex = -1;
+										submatrixIndex_«func_ID» = -1;
 									}
-									String matrixType = jsonObject.get("matrixType").getAsString();
-											        
-									//convert matrix json string to matrix in java
-									String valuesJson = jsonObject.getAsJsonArray("values").toString();
-									String extractedItems = valuesJson.replaceAll("\\[", "").replaceAll("\\]", "").replaceAll("\\s", "");
-									String[] items = extractedItems.split(",");	  
+																				        
+									//extract values from matrix json string
+									String valuesJson_«func_ID» = jsonObject_«func_ID».getAsJsonArray("values").toString();
+									String extractedItems_«func_ID» = valuesJson_«func_ID».replaceAll("\\[", "").replaceAll("\\]", "").replaceAll("\\s", "");
+									String[] items_«func_ID» = extractedItems_«func_ID».split(",");	  
 																				
-									Object [][] «dec.name» = new Object[n_rows][n_cols];
-									if(matrixType.equals("float") || matrixType.equals("double") || matrixType.equals("Double")){
-										int itemCount = 0;
-										for (int j=0; j < n_rows; j++) {
-											for(int k=0; k< n_cols; k++) {
-												«dec.name»[j][k] = Double.parseDouble(items[itemCount++]);
-											}
-										}
-									}else if (matrixType.equals("int") || matrixType.equals("Integer")){
-										int itemCount = 0;
-										for (int j=0; j < n_rows; j++) {
-											for(int k=0; k< n_cols; k++) {
-												«dec.name»[j][k] = Integer.parseInt(items[itemCount++]);
-											} 
-										}
-									}else if (matrixType.equals("str") || matrixType.equals("string") || matrixType.equals("String")){
-										//it is a string
-										int itemCount = 0;
-										for (int j=0; j < n_rows; j++) {
-											for(int k=0; k< n_cols; k++) {
-												«dec.name»[j][k] = items[itemCount++].replaceAll("\"","");
-											}
-										}
-									}
+									//create the actual matrix when the type is specified
 								'''
 						} else if ((dec.right as CastExpression).type.equals("ArrayList")) {
 							typeSystem.get(scope).put(dec.name, "ArrayList")
@@ -3355,9 +3330,45 @@ println("5-"+generateArithmeticExpression(dec.right as VariableFunction,scope))
 						}
 						return s
 					} else if (expression.feature.equals("getDisplacement")){
-						var s = filenameSingleVm + ".myDisplacement"
+						var s = filenameSingleVm + ".myDisplacement" //TO FIX
 						if (t) {
 							s += ";"
+						}
+						return s
+					} else if (expression.feature.equals("setReceivedMatrixType")){
+						var s = '''int itemCount_«func_ID» = 0;
+								'''
+						var paramType = generateArithmeticExpression(expression.expressions.get(0),scope).toString()
+						if( paramType.contains("Integer")){
+							typeSystem.get(scope).remove((expression.target as VariableDeclaration).name)
+							typeSystem.get(scope).put(expression.target.name,"Matrix_Integer")
+							s += '''Integer[][] «expression.target.name» = new Integer[n_rows_«func_ID»][n_cols_«func_ID»];
+									for (int j=0; j < n_rows_«func_ID»; j++) {
+										for(int k=0; k< n_cols_«func_ID»; k++) {
+											«expression.target.name»[j][k] = Integer.parseInt(items_«func_ID»[itemCount_«func_ID»++]);
+										} 
+									}
+									'''
+						}else if( paramType.contains("Double")){
+							typeSystem.get(scope).remove((expression.target as VariableDeclaration).name)
+							typeSystem.get(scope).put(expression.target.name,"Matrix_Double")
+							s += '''Double[][] «expression.target.name» = new Double[n_rows_«func_ID»][n_cols_«func_ID»];
+									for (int j=0; j < n_rows_«func_ID»; j++) {
+										for(int k=0; k< n_cols_«func_ID»; k++) {
+											«expression.target.name»[j][k] = Double.parseDouble(items_«func_ID»[itemCount_«func_ID»++]);
+										} 
+									}
+									'''
+						}else if( paramType.contains("String")){
+							typeSystem.get(scope).remove((expression.target as VariableDeclaration).name)
+							typeSystem.get(scope).put(expression.target.name,"Matrix_String")
+							s += '''String[][] «expression.target.name» = new String[n_rows_«func_ID»][n_cols_«func_ID»];
+									for (int j=0; j < n_rows_«func_ID»; j++) {
+										for(int k=0; k< n_cols_«func_ID»; k++) {
+											«expression.target.name»[j][k] = items_«func_ID»[itemCount_«func_ID»++].replaceAll("\"","");
+										} 
+									}
+									'''
 						}
 						return s
 					} else if (expression.feature.equals("deepToString")){ //matrix to string
