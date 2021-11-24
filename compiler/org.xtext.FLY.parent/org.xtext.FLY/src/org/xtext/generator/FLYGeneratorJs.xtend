@@ -1728,10 +1728,11 @@ class FLYGeneratorJs extends AbstractGenerator {
 			if (exp.target.typeobject.equals("var")) {
 				if (exp.feature.equals("split")) {
 					return "String[]"
-				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length")) {
+				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length") || exp.feature.equals("rowCount") || exp.feature.equals("colCount")) {
 					return "Integer"
 				} else if (exp.feature.equals("concat") || exp.feature.equals("substring") ||
-					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase")) {
+					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase")
+					|| exp.feature.equals("deepToString")) {
 					return "String"
 				} else {
 					return "Boolean"
@@ -1912,6 +1913,101 @@ class FLYGeneratorJs extends AbstractGenerator {
 					return generateJsArithmeticExpression(expression, scope)
 				}
 			}
+		}else if (expression.target.right instanceof ArrayInit ){
+								
+			if(((expression.target.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
+					((expression.target.right as ArrayInit).values.get(0) instanceof StringLiteral) ||
+					((expression.target.right as ArrayInit).values.get(0) instanceof FloatLiteral)
+				){ //array mono-dimensional	
+					if(expression.feature.equals("length")){
+						var s = expression.target.name + "." + expression.feature
+						return s
+					} else if (expression.feature.equals("deepToString")){
+						var s = expression.target.name
+						return s
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateJsArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
+
+				} else if ((expression.target.right as ArrayInit).values.get(0) instanceof ArrayValue){ //matrix 2d
+					if(expression.feature.equals("rowCount")){ //num of rows
+						var s = expression.target.name + ".length"
+						return s
+					} else if (expression.feature.equals("colCount")){ //num of cols
+						var s = expression.target.name + "[0].length"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = expression.target.name
+						return s
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateJsArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}	
+				}
+				
+		} else if ( (expression.target instanceof VariableDeclaration &&
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Array"))) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Array")))
+					) { //Array variable					
+					
+					if(expression.feature.equals("length")){
+						var s = expression.target.name + "." + expression.feature
+						return s
+					} else if (expression.feature.equals("deepToString")){ //array to string
+						var s = expression.target.name
+						return s
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateJsArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
+		} else if ( (expression.target instanceof VariableDeclaration &&
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Matrix"))) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Matrix")))
+					) { //Matrix variable
+					if(expression.feature.equals("rowCount")){
+						var s = expression.target.name + ".length"
+						return s
+					} else if (expression.feature.equals("colCount")){
+						var s = expression.target.name + "[0].length"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = expression.target.name
+						return s
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateJsArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
 		}else{
 			return generateJsArithmeticExpression(expression, scope)
 		}
