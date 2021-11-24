@@ -64,6 +64,7 @@ import org.eclipse.xtend.lib.macro.declaration.Declaration
 import org.xtext.fLY.EnvironemtLiteral
 import org.xtext.fLY.ObjectLiteral
 import org.xtext.services.FLYGrammarAccess.VariableDeclarationElements
+import org.xtext.fLY.PrintlnExpression
 
 /**
  * Generates code from your model files on save.
@@ -5199,6 +5200,7 @@ class FLYGenerator extends AbstractGenerator {
 	}
 
 	def generatePrintExpression(PrintExpression expression, String scope) {
+				
 		if (expression.print instanceof ChannelReceive) {
 			return '''
 				try{
@@ -5207,8 +5209,12 @@ class FLYGenerator extends AbstractGenerator {
 					e.printStackTrace();
 				}
 			'''
-		} else
+		} else if (expression instanceof PrintlnExpression) {
 			return '''System.out.println(«generateArithmeticExpression(expression.print,scope)»);'''
+		
+		} else {
+			return '''System.out.print(«generateArithmeticExpression(expression.print,scope)»);'''
+		}
 	}
 
 	def generateAssignment(Assignment assignment, String scope) {
