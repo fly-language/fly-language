@@ -79,7 +79,6 @@ class FLYGenerator extends AbstractGenerator {
 	private HashMap<String, HashMap<String, String>> typeSystem = new HashMap<String, HashMap<String, String>>(); // memory hash
 	var name = ""
 	var filenameVmCluster = ""
-	var filenameSingleVm = ""
 	var vm_cluster_name = ""
 	var func_ID = 0
 	var file_deploy_id = 0
@@ -97,7 +96,6 @@ class FLYGenerator extends AbstractGenerator {
 			var name_extension = resource.URI.toString.split('/').last
 			name = name_extension.toString.split('.fly').get(0)
 			filenameVmCluster = name + "ExecutionOnVMCluster"
-			filenameSingleVm = name + "SingleVM"
 			typeSystem.put("main", new HashMap<String, String>())
 
 			// generate .js or .py file
@@ -144,7 +142,10 @@ class FLYGenerator extends AbstractGenerator {
 				if(type_env.equals("vm-cluster")){
 					//Generate .java files (VM Cluster)
 					vm_cluster_name = element.environment.name
-					fsa.generateFile(filenameSingleVm + ".java", resource.compileJavaForSingleVM)
+					
+					for (e : resource.allContents.toIterable.filter(FlyFunctionCall).filter[(environment.right as DeclarationObject).features.get(0).value_s.equals("vm-cluster")]){
+						fsa.generateFile(name +"_"+e.target.name + ".java", resource.compileJavaFunctionsForVMCluster(e))
+					}
 					fsa.generateFile(filenameVmCluster + ".java", resource.compileJavaForVMCluster)
 					return
 				}
@@ -259,395 +260,112 @@ class FLYGenerator extends AbstractGenerator {
 		«ENDFOR»
 				
 		public static void main(String[] args){
-			try{
-				«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
-					«initialiseConstant(element,"main")»
-				«ENDFOR»
-				
-				«FOR element : resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject]
-				.filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]
-				.filter[(right as DeclarationObject).features.get(0).value_s.equals("vm-cluster") ||
-					(right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-					«setEnvironmentDeclarationInfo(element)»
-				«ENDFOR»
-				
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
-					terminationQueue = "ch-termination-"+__id_execution;
+			«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
+				«initialiseConstant(element,"main")»
+			«ENDFOR»
+			
+			«FOR element : resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject]
+			.filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]
+			.filter[(right as DeclarationObject).features.get(0).value_s.equals("vm-cluster") ||
+				(right as DeclarationObject).features.get(0).value_s.equals("smp")]»
+				«setEnvironmentDeclarationInfo(element)»
+			«ENDFOR»
+			
+			String purchasingOption_«id_execution» = (String) __fly_environment.get("«vm_cluster_name»").get("purchasing_option");
+			String vmTypeSize_«id_execution» = (String) __fly_environment.get("«vm_cluster_name»").get("vm_type_size");
+			boolean persistent_«id_execution» = Boolean.parseBoolean((String) __fly_environment.get("«vm_cluster_name»").get("persistent"));
+			int vmCount_«id_execution» = Integer.parseInt((String) __fly_environment.get("«vm_cluster_name»").get("count"));
+			
+			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+			filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
+				terminationQueue = "ch-termination-"+__id_execution;
 
-					«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
-						"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
-						"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
-						"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
-						__id_execution+"",
-						"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»",
-						terminationQueue);
-					
-					«element.name».VMClusterInit();
-					«element.name».setupQueue(terminationQueue);
-				«ENDFOR»
+				«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
+					"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
+					"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
+					"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
+					__id_execution+"",
+					"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»",
+					terminationQueue);
 				
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[((right as DeclarationObject).features.get(0).value_s.equals("aws"))]»
-					__sqs_«element.name».createQueue(new CreateQueueRequest("ch-termination-"+__id_execution));
-					terminationQueue = __sqs_«element.name».getQueueUrl("ch-termination-"+__id_execution).getQueueUrl();					
-					«element.name» = new AWSClient(creds, "«(element.right as DeclarationObject).features.get(4).value_s»", terminationQueue);
-				«ENDFOR»
-								
-				String purchasingOption = (String) __fly_environment.get("«vm_cluster_name»").get("purchasing_option");
-				String vmTypeSize = (String) __fly_environment.get("«vm_cluster_name»").get("vm_type_size");
-				boolean persistent = Boolean.parseBoolean((String) __fly_environment.get("«vm_cluster_name»").get("persistent"));
-				int vmCount = Integer.parseInt((String) __fly_environment.get("«vm_cluster_name»").get("count"));
+				«element.name».VMClusterInit();
+				«element.name».setupQueue(terminationQueue);
+			«ENDFOR»
 				
-				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall)»
-				
+			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+			filter[((right as DeclarationObject).features.get(0).value_s.equals("aws"))]»
+				__sqs_«element.name».createQueue(new CreateQueueRequest("ch-termination-"+__id_execution));
+				terminationQueue = __sqs_«element.name».getQueueUrl("ch-termination-"+__id_execution).getQueueUrl();					
+				«element.name» = new AWSClient(creds, "«(element.right as DeclarationObject).features.get(4).value_s»", terminationQueue);
+			«ENDFOR»
+			
+			try{
+				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[(environment.right as DeclarationObject).features.get(0).value_s.equals("vm-cluster")]»
 					«FOR el : (resource.allContents.toIterable.filter(VariableDeclaration))»
 						«IF ((el as VariableDeclaration).name.equals((element.input.f_index as VariableLiteral).variable.name))»
 							«generateVariableDeclaration(el,"main")»
 						«ENDIF»
 					«ENDFOR»
-
-					«element.environment.environment.get(0).name».zipAndUploadCurrentProject();
-					
-					int vmsCreatedCount = «element.environment.environment.get(0).name».launchVMCluster(vmTypeSize, purchasingOption, persistent, vmCount);
-					
-					if ( vmsCreatedCount != 0) {
-						System.out.print("\n\u27A4 Waiting for virtual machines boot script to complete...");
-						«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-							while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != vmsCreatedCount);
-						«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-														.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != vmsCreatedCount);
-						«ENDIF»
-						System.out.println("Done");
-					}
-					if(vmsCreatedCount != vmCount){
-						if ( vmsCreatedCount > 0) «element.environment.environment.get(0).name».downloadFLYProjectonVMCluster();
-						
-						System.out.print("\n\u27A4 Waiting for download project on VM CLuster to complete...");
-						«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-							while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount+vmsCreatedCount));
-						«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-														.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount+vmsCreatedCount));
-						«ENDIF»
-					}
-					System.out.println("Done");
-					
-					String mainClass = "«name»";
-					«element.environment.environment.get(0).name».buildFLYProjectOnVMCluster(mainClass);
-					
-					System.out.print("\n\u27A4 Waiting for building project on VM CLuster to complete...");
-					if(vmsCreatedCount != vmCount){
-						«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-							while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != ( (vmCount*2)+vmsCreatedCount));
-						«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-														.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != ( (vmCount*2)+vmsCreatedCount));
-						«ENDIF»
-					} else {
-						«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-							while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount*2));
-						«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-							while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-														.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount*2));
-						«ENDIF»
-					}
-					System.out.println("Done");
-									
-					«workloadDistributionOnVMCluster(element,"main", ((element.environment.right as DeclarationObject).features.get(4) as DeclarationFeature).value_t)»
-					
-					«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-					filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-						«IF !(el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")»
-						«generateChannelWaitingResultsForVMCluster(el)»
-						«ENDIF»
-					«ENDFOR»
-										
-					«element.environment.environment.get(0).name».executeFLYonVMCluster(portionInputs,
-													numberOfFunctions,
-													__id_execution);
-
-					«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-					filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-						«IF !(el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")»
-							System.out.print("\n\u27A4 Waiting for FLY execution to complete...");
-							if(vmsCreatedCount != vmCount){
-								«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-									while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != ( (vmCount*3)+vmsCreatedCount));
-								«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-									while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-																.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != ( (vmCount*3)+vmsCreatedCount));
-								«ENDIF»
-							} else {
-								«IF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-									while («element.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount*3));
-								«ELSEIF ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-									while ( Long.parseLong(__sqs_«element.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-																.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount*3));
-								«ENDIF»
-							}
-							__wait_on_«el.name» = false;
-							System.out.println("Done");
-						«ENDIF»
-					«ENDFOR»
-					
-					//Check for execution errors
-					String err = «element.environment.environment.get(0).name».checkForExecutionErrors(numberOfFunctions);
-					if (err != null) {
-						//Print the error within each VM
-						System.out.println("The execution failed with the following errors in each VM:");
-						System.out.println(err);
-					}else {
-						//No execution errors
-						«IF element.isIs_thenall»
-							«element.thenall.name»();
-						«ENDIF»
-					}
-				
-				}catch(Exception e){
-					e.printStackTrace();
-				}finally{
-					«element.environment.environment.get(0).name».deleteResourcesAllocated();
-					
-					«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-					filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-						«IF (el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws")»
-						__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(terminationQueue));
-						__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(__sqs_«el.environment.get(0).name».getQueueUrl("«el.name»-"+__id_execution).getQueueUrl()));
-						«ENDIF»
-					«ENDFOR»
-					
-					«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-					filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-						&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
-						__thread_pool_«el.name».shutdown();
-					«ENDFOR»
-					
-					System.exit(0);
-				}
-
 				«ENDFOR»
-			}
-			
-			«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
-				«IF checkBlock(element.eContainer)==false»
-					«generateFunctionDefinition(element)»
-				«ENDIF»	
-			«ENDFOR»
-			
-			private static String __generateString(String s,int id) {
-				StringBuilder b = new StringBuilder();
-				b.append("{\"id\":"+id+",\"data\":");
-				b.append("[");
-				String[] tmp = s.split("\n");
-				for(String t: tmp){
-					b.append(t);
-					if(t != tmp[tmp.length-1]){
-						b.append(",");
-					} 
-				}
-				b.append("]}");
-				return b.toString();
-			}
+								
+				«FOR element : resource.allContents.toIterable.filter(Expression)»
+					«IF checkBlock(element.eContainer)==false»
+						«generateExpression(element,"main")»
+					«ENDIF»
+				«ENDFOR»
+				
+				//To Continue					
+			}catch(Exception e){
+				e.printStackTrace();
+			}finally{
+				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+				filter[((right as DeclarationObject).features.get(0).value_s.equals("aws"))]»
+					«element.name».deleteResourcesAllocated();
+				«ENDFOR»
+				
+				«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
+				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+					«IF (el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws")»
+					__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(terminationQueue));
+					«ENDIF»
+				«ENDFOR»
+				
+				«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
+					__thread_pool_«el.name».shutdown();
+				«ENDFOR»
+				
+				System.exit(0);
+			}	
 		}
+			
+		«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
+			«IF checkBlock(element.eContainer)==false»
+				«generateFunctionDefinition(element)»
+			«ENDIF»	
+		«ENDFOR»
+		
+		private static String __generateString(String s,int id) {
+			StringBuilder b = new StringBuilder();
+			b.append("{\"id\":"+id+",\"data\":");
+			b.append("[");
+			String[] tmp = s.split("\n");
+			for(String t: tmp){
+				b.append(t);
+				if(t != tmp[tmp.length-1]){
+					b.append(",");
+				} 
+			}
+			b.append("]}");
+			return b.toString();
+		}
+	}
 		
 	'''
+
 	
-	def generateChannelWaitingResultsForVMCluster(VariableDeclaration dec) {
-		var env = ((dec.environment.get(0).right as DeclarationObject).features.get(0)).value_s
-		var env_name = dec.environment.get(0).name
-		var local_env = res.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-			filter[(right as DeclarationObject).features.get(0).value_s.equals("smp")].get(0)
-		var local = local_env.name
-		switch env {
-			case "aws":
-			return '''
-				__sqs_«env_name».createQueue(new CreateQueueRequest("«dec.name»-"+__id_execution));
-				
-				for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
-					__thread_pool_«local».submit(new Callable<Object>() {
-						@Override
-						public Object call() throws Exception {
-							while(__wait_on_«dec.name») {
-								ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__sqs_«env_name».getQueueUrl("«dec.name»-"+__id_execution).getQueueUrl()).
-										withWaitTimeSeconds(1).withMaxNumberOfMessages(10);
-								ReceiveMessageResult __res = __sqs_«env_name».receiveMessage(__recmsg);
-								for(Message msg : __res.getMessages()) { 
-									«dec.name».put(msg.getBody());
-									__sqs_«env_name».deleteMessage(__sqs_«env_name».getQueueUrl("«dec.name»-"+__id_execution).getQueueUrl(), msg.getReceiptHandle());
-								}
-							}
-							return null;
-						}
-					});
-				}
-			'''
-		case "azure":
-			return '''
-				«env_name».setupQueue("«dec.name»-"+__id_execution);
-
-				for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
-					__thread_pool_«local».submit(new Callable<Object>() {
-						@Override
-						public Object call() throws Exception {
-							while(__wait_on_«dec.name») {
-								List<String> __recMsgs = «env_name».peeksFromQueue("«dec.name»-"+__id_execution,32);
-								for(String msg : __recMsgs) { 
-									«dec.name».put(msg);
-								}
-							}
-							return null;
-						}
-					});
-				}
-			'''
-			}	
-	}
-	
-	def workloadDistributionOnVMCluster(FlyFunctionCall call, String scope, int vmCount) {
-		var s = ''''''
-		if ((call.input as FunctionInput).is_for_index) { // 'for 'keyword 
-
-			if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) != null &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
-					equals("HashMap")) { // f_index is a reference to an object
-				s += '''
-					TO DO
-				'''
-			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
-					null &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
-					equals("Table")) { // f_index is a reference to a Table
-				s += '''
-					TO DO
-				'''
-			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
-					null &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
-					equals("File")) { // f_index is a txt file	
-					s+='''
-						TO DO
-					'''
-						
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name) !=
-					null &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Directory")){
-					s+='''
-						TO DO
-					'''
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")){
-						s+='''
-							int vmCount_«func_ID» = «vmCount»;
-							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-							ArrayList<String> portionInputs = new ArrayList<String>();
-							int __arr_length_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
-													
-							if ( __arr_length_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __arr_length_«func_ID»;
-							
-							int[] dimPortions = new int[vmCount_«func_ID»]; 
-							int[] displ = new int[vmCount_«func_ID»]; 
-							int offset = 0;
-							
-							for(int __i=0;__i<vmCount_«func_ID»;__i++){
-								dimPortions[__i] = (__arr_length_«func_ID» / vmCount_«func_ID») +
-									((__i < (__arr_length_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
-								displ[__i] = offset;								
-								offset += dimPortions[__i];
-								
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"subarrayLength\":"+dimPortions[__i]+",\"subarrayIndex\":"+__i+",\"subarrayDisplacement\":"+displ[__i]+"}");							
-								portionInputs.add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));
-							}
-							int numberOfFunctions = vmCount_«func_ID»;
-						'''
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
-					if (call.input.split.equals("row")){ 
-						s+='''
-							int vmCount_«func_ID» = «vmCount»;
-							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-							ArrayList<String> portionInputs = new ArrayList<String>();
-							
-							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
-							int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
-																				
-							if ( __rows_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __rows_«func_ID»;
-														
-							int[] dimPortions = new int[vmCount_«func_ID»]; 
-							int[] displ = new int[vmCount_«func_ID»]; 
-							int offset = 0;
-														
-							for(int __i=0;__i<vmCount_«func_ID»;__i++){
-								dimPortions[__i] = (__rows_«func_ID» / vmCount_«func_ID») + ((__i < (__rows_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
-								displ[__i] = offset;								
-								offset += dimPortions[__i];
-															
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+dimPortions[__i]+",\"submatrixCols\":"+__cols_«func_ID»+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ[__i]+"}");							
-								
-								portionInputs.add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));
-							}
-							int numberOfFunctions = vmCount_«func_ID»;
-						'''
-					}else if (call.input.split.equals("col")){ 
-						s+='''
-							int vmCount_«func_ID» = «vmCount»;
-							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-							ArrayList<String> portionInputs = new ArrayList<String>();
-							
-							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
-							int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
-							
-							if ( __cols_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __cols_«func_ID»;
-														
-							int[] dimPortions = new int[vmCount_«func_ID»]; 
-							int[] displ = new int[vmCount_«func_ID»]; 
-							int offset = 0;
-															
-							for(int __i=0;__i<vmCount_«func_ID»;__i++){
-								dimPortions[__i] = (__cols_«func_ID» / vmCount_«func_ID») +
-																		((__i < (__cols_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
-								displ[__i] = offset;
-								offset += dimPortions[__i];
-								
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+__rows_«func_ID»+",\"submatrixCols\":"+dimPortions[__i]+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ[__i]+"}");							
-								
-								portionInputs.add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));						
-							}
-							int numberOfFunctions = vmCount_«func_ID»;
-						'''
-					}
-			} else { // f_index is a range
-				
-				var value2 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l2) != null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l2.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value2  ;
-
-				s += '''
-					for(int i=0; i<«vmCount»;i++){
-					            dimPortions[i] = («value2» / «vmCount») +
-					                            ((i < («value2» % «vmCount»)) ? 1 : 0);
-					            displ[i] = offset;
-					            offset += dimPortions[i];
-					}
-					int numberOfFunctions = «value2»;
-				'''
-			}
-		} else { // no 'in' keyword
-
-				s += '''
-					TO DO
-				'''
-		}
-		return s
-	}
-	
-	def CharSequence compileJavaForSingleVM(Resource resource) '''
+	def CharSequence compileJavaFunctionsForVMCluster(Resource resource, FlyFunctionCall funcCall) '''
 	import java.io.File;
 	import java.io.FileInputStream;
 	import java.io.InputStreamReader;
@@ -711,106 +429,357 @@ class FLYGenerator extends AbstractGenerator {
 	import com.google.gson.JsonParser;
 	import org.json.JSONObject;
 	
-
-		«IF checkAzure()»
-		import isislab.azureclient.AzureClient;
-		«ENDIF»
+	«IF checkAzure()»
+	import isislab.azureclient.AzureClient;
+	«ENDIF»
+	
+	«IF checkAWS()»
+	import com.amazonaws.auth.AWSStaticCredentialsProvider;
+	import com.amazonaws.auth.BasicAWSCredentials;
+	import com.amazonaws.services.sqs.AmazonSQS;
+	import com.amazonaws.services.sqs.AmazonSQSClientBuilder;
+	import com.amazonaws.services.sqs.model.SendMessageRequest;
+	import isislab.awsclient.AWSClient;
+	«ENDIF»
 		
-		«IF checkAWS()»
-		import com.amazonaws.auth.AWSStaticCredentialsProvider;
-		import com.amazonaws.auth.BasicAWSCredentials;
-		import com.amazonaws.services.sqs.AmazonSQS;
-		import com.amazonaws.services.sqs.AmazonSQSClientBuilder;
-		import com.amazonaws.services.sqs.model.SendMessageRequest;
-		import isislab.awsclient.AWSClient;
-		«ENDIF»
+	public class «name»_«funcCall.target.name» {
+				
+		static HashMap<String,HashMap<String, Object>> __fly_environment = new HashMap<String,HashMap<String,Object>>();
+		static long  __id_execution;
+		static Integer subIndex_«id_execution» = -1;
+		static Integer displ_«id_execution» = -1;
 		
-		public class «filenameSingleVm» {
+		«FOR element : (resource.allContents.toIterable.filter(Expression))»
+			«IF element instanceof VariableDeclaration»
+				«IF element.right instanceof DeclarationObject
+					&& (!(element.right as DeclarationObject).features.get(0).value_s.equals("aws")) //all aws usual declarations are not needed
+					&& ( (element.right as DeclarationObject).features.get(0).value_s.equals("channel") || list_environment.contains((element.right as DeclarationObject).features.get(0).value_s) )»
+					«generateVariableDeclaration(element,"main")»
+				«ELSEIF  element.right instanceof DeclarationObject
+					&& (element.right as DeclarationObject).features.get(0).value_s.equals("aws")»
+					static BasicAWSCredentials creds = new BasicAWSCredentials("«(element.right as DeclarationObject).features.get(2).value_s»", "«(element.right as DeclarationObject).features.get(3).value_s»");
+					static AWSClient «element.name» = null;
 					
-			static HashMap<String,HashMap<String, Object>> __fly_environment = new HashMap<String,HashMap<String,Object>>();
-			static long  __id_execution;
-			static Integer subIndex_«id_execution» = -1;
-			static Integer displ_«id_execution» = -1;
-			
-			«FOR element : (resource.allContents.toIterable.filter(Expression))»
-				«IF element instanceof VariableDeclaration»
-					«IF element.right instanceof DeclarationObject
-						&& (!(element.right as DeclarationObject).features.get(0).value_s.equals("aws")) //all aws usual declarations are not needed
-						&& ( (element.right as DeclarationObject).features.get(0).value_s.equals("channel") || list_environment.contains((element.right as DeclarationObject).features.get(0).value_s) )»
-						«generateVariableDeclaration(element,"main")»
-					«ELSEIF  element.right instanceof DeclarationObject
-						&& (element.right as DeclarationObject).features.get(0).value_s.equals("aws")»
-						static BasicAWSCredentials creds = new BasicAWSCredentials("«(element.right as DeclarationObject).features.get(2).value_s»", "«(element.right as DeclarationObject).features.get(3).value_s»");
-						static AWSClient «element.name» = null;
-						
-						static AmazonSQS __sqs_«element.name» = AmazonSQSClientBuilder.standard()
-										.withRegion("«(element.right as DeclarationObject).features.get(4).value_s»")							 
-										.withCredentials(new AWSStaticCredentialsProvider(creds))
-										.build();
-										
-					«ENDIF»
+					static AmazonSQS __sqs_«element.name» = AmazonSQSClientBuilder.standard()
+									.withRegion("«(element.right as DeclarationObject).features.get(4).value_s»")							 
+									.withCredentials(new AWSStaticCredentialsProvider(creds))
+									.build();
+									
 				«ENDIF»
-				«IF element instanceof ConstantDeclaration»
-					«generateConstantDeclaration(element,"main")»	
+			«ENDIF»
+			«IF element instanceof ConstantDeclaration»
+				«generateConstantDeclaration(element,"main")»	
+			«ENDIF»
+		«ENDFOR»
+				
+		public static void main(String[] args) throws Exception{
+			
+			int numThreadsAvailable = Runtime.getRuntime().availableProcessors();
+			
+			__id_execution = Long.parseLong(args[1]);
+			String myObjectInput = args[0];
+				
+			«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
+				«initialiseConstant(element,"main")»
+			«ENDFOR»
+
+			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+			filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
+				«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
+					"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
+					"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
+					"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
+					__id_execution+"",
+					"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»");
+					
+				«element.name».VMClusterInit();
+			«ENDFOR»
+			
+			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
+			filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+				«IF ((element.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
+						«element.environment.get(0).name».setupQueue("«element.name»-"+__id_execution);	
 				«ENDIF»
 			«ENDFOR»
-					
-			public static void main(String[] args) throws Exception{
-				
-					int numThreadsAvailable = Runtime.getRuntime().availableProcessors();
-				
-					__id_execution = Long.parseLong(args[1]);
-					String myObjectInput = args[0];
-					
-					«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
-						«initialiseConstant(element,"main")»
-					«ENDFOR»
 
-					«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-					filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
-						«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
-							"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
-							"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
-							"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
-							__id_execution+"",
-							"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»");
+			«generateVMClusterFunction(funcCall,"main")»
+			
+			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+			filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+				&& ( ((right as DeclarationObject).features.get(0).value_s.equals("smp")) ||
+					((right as DeclarationObject).features.get(0).value_s.equals("vm-cluster")))]»
+				__thread_pool_«element.name».shutdown();
+			«ENDFOR»
+			System.exit(0);
+		}
+				
+		«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
+			«IF checkBlock(element.eContainer)==false»
+				«generateFunctionDefinition(element)»
+			«ENDIF»	
+		«ENDFOR»
+	}
+	'''
+	
+	def generateVMClusterFunction(FlyFunctionCall call, String scope) {
+		
+		var s = ''''''
+		if ((call.input as FunctionInput).is_for_index) { // 'for 'keyword 
+			s = '''
+				final List<Future<Object>> «call.target.name»_«func_ID»_return = new ArrayList<Future<Object>>();
+			'''
+			if (call.isIsAsync && call.isIs_thenall) { // asynchronous call with thenall
+				s += '''
+					final AtomicInteger __count = new AtomicInteger(0);
+				'''
+			}
+
+			if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
+				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
+					null &&
+				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
+					equals("HashMap")) { // f_index is a reference to an object
+					//TO DO
+			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
+				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
+					null &&
+				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
+					equals("Table")) { // f_index is a reference to a Table
+					//TO DO
+			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
+				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
+					null &&
+				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
+					equals("File")) { // f_index is a txt file	
+					//TO DO
+			} else if(call.input.f_index instanceof VariableLiteral &&
+				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Directory")){
+					//TO DO if needed
+			} else if(call.input.f_index instanceof VariableLiteral &&
+				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")){
+					s+='''
+						JsonObject jsonObject = new JsonParser().parse(myObjectInput).getAsJsonObject();
+						jsonObject = jsonObject.getAsJsonArray("data").get(0).getAsJsonObject();
+						
+						int subarrayLength = jsonObject.get("subarrayLength").getAsInt();
+						int subarrayIndex = jsonObject.get("subarrayIndex").getAsInt();
+						int subarrayDisplacement = jsonObject.get("subarrayDisplacement").getAsInt();
+						
+						subIndex_«id_execution» = subarrayIndex;
+						displ_«id_execution» = subarrayDisplacement;
+						
+						int numThreadsToUse = numThreadsAvailable;
+						if (subarrayLength < numThreadsAvailable) numThreadsToUse = subarrayLength;
+						
+						for(int __i=0;__i< numThreadsToUse;__i++){
+							final int i = __i;
+							Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
+										
+								public Object call() throws Exception {
+									
+									Object __ret = «call.target.name»(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,subarrayDisplacement, subarrayDisplacement+subarrayLength ));
+									«IF call.isIs_then»
+										«call.then.name»();
+									«ENDIF»					
+									return __ret;
+								}
+							});
+							«call.target.name»_«func_ID»_return.add(_f);
+						}
+						
+					'''
+			} else if(call.input.f_index instanceof VariableLiteral &&
+				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
+					if(call.input.split.equals("row")){ 
+						s+='''
+							JsonObject jsonObject = new JsonParser().parse(myObjectInput).getAsJsonObject();
+							jsonObject = jsonObject.getAsJsonArray("data").get(0).getAsJsonObject();
 							
-						«element.name».VMClusterInit();
-					«ENDFOR»
-					
-					«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-					filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-						«IF ((element.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-								«element.environment.get(0).name».setupQueue("«element.name»-"+__id_execution);	
-						«ENDIF»
-					«ENDFOR»
-					
-					«FOR element : resource.allContents.toIterable.filter(Expression)»
-						«IF checkBlock(element.eContainer)==false»
-							«generateExpression(element,"main")»
-						«ENDIF»
-					«ENDFOR»
-					
-					«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-					filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-						&& ( ((right as DeclarationObject).features.get(0).value_s.equals("smp")) ||
-							((right as DeclarationObject).features.get(0).value_s.equals("vm-cluster")))]»
-						__thread_pool_«element.name».shutdown();
-					«ENDFOR»
-					System.exit(0);
+							int submatrixRows = jsonObject.get("submatrixRows").getAsInt();
+							int submatrixCols = jsonObject.get("submatrixCols").getAsInt();
+							int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+							int submatrixDisplacement = jsonObject.get("submatrixDisplacement").getAsInt();
+							
+							subIndex_«id_execution» = submatrixIndex;
+							displ_«id_execution» = submatrixDisplacement;
+							
+							int numThreadsToUse = numThreadsAvailable;
+							if (submatrixRows < numThreadsAvailable) numThreadsToUse = submatrixRows;
+							
+							//Get the type of element inside the matrix and generate the submatrix
+							«typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
+								.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
+								typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
+								)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
+												.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
+													typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
+												)»[submatrixRows][submatrixCols];
+																
+							for (int i = 0, k = submatrixDisplacement; k < (submatrixDisplacement + submatrixRows); i++, k++) {
+							    System.arraycopy(«(call.input.f_index as VariableLiteral).variable.name»[k], 0, subMatrix[i], 0, subMatrix[i].length);
+							}
+							
+							for(int __i=0;__i< numThreadsToUse;__i++){
+								final int i = __i;
+								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
+											
+									public Object call() throws Exception {
+										
+										Object __ret = «call.target.name»(subMatrix);
+										«IF call.isIs_then»
+											«call.then.name»();
+										«ENDIF»					
+										return __ret;
+									}
+								});
+								«call.target.name»_«func_ID»_return.add(_f);
+							}
+						'''
+					}else if(call.input.split.equals("col")){
+						s+='''
+							JsonObject jsonObject = new JsonParser().parse(myObjectInput).getAsJsonObject();
+							jsonObject = jsonObject.getAsJsonArray("data").get(0).getAsJsonObject();
+							
+							int submatrixRows = jsonObject.get("submatrixRows").getAsInt();
+							int submatrixCols = jsonObject.get("submatrixCols").getAsInt();
+							int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
+							int submatrixDisplacement = jsonObject.get("submatrixDisplacement").getAsInt();
+							
+							subIndex_«id_execution» = submatrixIndex;
+							displ_«id_execution» = submatrixDisplacement;
+							
+							int numThreadsToUse = numThreadsAvailable;
+							if (submatrixCols < numThreadsAvailable) numThreadsToUse = submatrixCols;
+							
+							//Get the type of element inside the matrix and generate the submatrix
+							«typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
+								.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
+								typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
+								)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
+												.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
+													typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
+												)»[submatrixRows][submatrixCols];
+							
+							for (int i = 0; i < submatrixRows; i++){								
+								for (int j = 0, k = submatrixDisplacement; j < submatrixCols; j++, k++) {
+									subMatrix[i][j] = «(call.input.f_index as VariableLiteral).variable.name»[i][k];
+							    }
+							}
+							
+							for(int __i=0;__i< numThreadsToUse;__i++){
+								final int i = __i;
+								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
+											
+									public Object call() throws Exception {
+										
+										Object __ret = «call.target.name»(subMatrix);
+										«IF call.isIs_then»
+											«call.then.name»();
+										«ENDIF»					
+										return __ret;
+									}
+								});
+								«call.target.name»_«func_ID»_return.add(_f);
+							}
+						'''
+					}
+			} else { // f_index is a range
+				if (call.isIsAsync && call.isIs_thenall) {
+					s += '''
+						final int __numThread = «((call.input as FunctionInput).f_index as RangeLiteral ).value2 - ((call.input as FunctionInput).f_index as RangeLiteral ).value1» - 1;
+					'''
 				}
 				
-				«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
-					«IF checkBlock(element.eContainer)==false»
-						«generateFunctionDefinition(element)»
-					«ENDIF»	
-				«ENDFOR»
+				var value1 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l1) != null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l1.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value1  ;
+				var value2 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l2) != null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l2.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value2  ;
+
+				s += '''
+					int dimPortion = Integer.parseInt(args[0]); //dimPortion
+					// args[1], start index -- in range literal could be not used
+					
+					for(int _i=«value1»;_i<dimPortion;_i++){
+						final int __i = _i;
+						Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
+							
+							public Object call() throws Exception {
+								// TODO Auto-generated method stub
+								
+								Object __ret = «call.target.name»(«IF call.target.parameters.length==1»__i«ENDIF»);
+								«IF call.isIs_then»
+									«call.then.name»();
+								«ENDIF»
+								«IF call.isIsAsync && call.isIs_thenall»
+									if(__count.getAndIncrement()==__numThread){
+										__asyncTermination.put("Termination");
+									}
+								«ENDIF»   						
+								return __ret;
+							}
+						});
+						«call.target.name»_«func_ID»_return.add(_f);
+					}
+				'''
 			}
-	'''
+			last_func_result = call.target.name + "_" + func_ID + "_return"
+
+			if (!call.isAsync) {
+				s += '''
+					for(Future _f : «call.target.name»_«func_ID»_return){
+						try{
+							_f.get();
+						} catch(Exception e){
+							e.printStackTrace();
+						}
+					}
+					
+				'''
+			}
+
+		} else { // no 'in' keyword
+			var par_id = 0
+			var par_1 = ''' 
+			''' // parameter declaration
+			var par_2 = '''
+			''' // passing parameter 
+			for (el : call.input.expressions) {
+				par_1 += '''
+					final Object _par_«par_id» = «generateArithmeticExpression(el,scope)»;
+				'''
+				par_2 += ''' _par_«par_id»	'''
+				if (el != call.input.expressions.last) {
+					par_2 += ''','''
+				}
+				par_id++
+			}
+			s += '''
+				«par_1»
+				Future<Object> _f_«func_ID» = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
+					
+					public Object call() throws Exception {
+						// TODO Auto-generated method stub
+											
+						return «call.target.name»(«par_2»);
+					}
+				});
+			'''
+			if (!call.isIsAsync) {
+				s += '''
+					try{
+						_f_«func_ID».get();
+						«IF call.is_then »
+							«call.then.name»();
+						«ENDIF»
+					} catch(Exception e){
+						e.printStackTrace();
+					}
+				'''
+			}
+		}
+		return s
+	}
 		
 	
-	
-		
+
  	def CharSequence compileJava(Resource resource){
 	var termination_init_counter = 0
 	var termination_counter = 0
@@ -3536,285 +3505,317 @@ class FLYGenerator extends AbstractGenerator {
 			case "aws": return generateAWSFlyFunctionCall(call, scope)
 			case "aws-debug": return generateAWSFlyFunctionCall(call, scope)
 			case "azure": return generateAzureFlyFunctionCall(call, scope)
-			case "vm-cluster": return generateVMFlyFunction(call, scope)
+			case "vm-cluster": return generateVMClusterFlyFunctionCall(call, scope)
 		}
 	}
 	
-	def generateVMFlyFunction(FlyFunctionCall call, String scope) {
+	def generateVMClusterFlyFunctionCall(FlyFunctionCall call, String scope) {
 		
-		var local_env = res.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-			filter[(right as DeclarationObject).features.get(0).value_s.equals("smp")].get(0)
-		
-		var s = ''''''
-		if ((call.input as FunctionInput).is_for_index) { // 'for 'keyword 
-			s = '''
-				final List<Future<Object>> «call.target.name»_«func_ID»_return = new ArrayList<Future<Object>>();
-			'''
-			if (call.isIsAsync && call.isIs_thenall) { // asynchronous call with thenall
-				s += '''
-					final AtomicInteger __count = new AtomicInteger(0);
-				'''
+		var s = '''
+			«call.environment.environment.get(0).name».zipAndUploadCurrentProject();
+					
+			int vmsCreatedCount_«func_ID» = «call.environment.environment.get(0).name».launchVMCluster(vmTypeSize_«id_execution», purchasingOption_«id_execution», persistent_«id_execution», vmCount_«id_execution»);
+			
+			if ( vmsCreatedCount_«func_ID» != 0) {
+				System.out.print("\n\u27A4 Waiting for virtual machines boot script to complete...");
+				«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
+					while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != vmsCreatedCount_«func_ID»);
+				«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
+					while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
+												.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != vmsCreatedCount_«func_ID»);
+				«ENDIF»
+				System.out.println("Done");
 			}
-
-			if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
-					null &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
-					equals("HashMap")) { // f_index is a reference to an object
-					//TO DO if needed
-			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
-					null &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
-					equals("Table")) { // f_index is a reference to a Table
-					//TO DO if needed
-			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
-					null &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
-					equals("File")) { // f_index is a txt file	
-					//TO DO if needed
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Directory")){
-					//TO DO if needed
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")){
-					s+='''
-						JsonObject jsonObject = new JsonParser().parse(myObjectInput).getAsJsonObject();
-						jsonObject = jsonObject.getAsJsonArray("data").get(0).getAsJsonObject();
-						
-						int subarrayLength = jsonObject.get("subarrayLength").getAsInt();
-						int subarrayIndex = jsonObject.get("subarrayIndex").getAsInt();
-						int subarrayDisplacement = jsonObject.get("subarrayDisplacement").getAsInt();
-						
-						subIndex_«id_execution» = subarrayIndex;
-						displ_«id_execution» = subarrayDisplacement;
-						
-						int numThreadsToUse = numThreadsAvailable;
-						if (subarrayLength < numThreadsAvailable) numThreadsToUse = subarrayLength;
-						
-						for(int __i=0;__i< numThreadsToUse;__i++){
-							final int i = __i;
-							Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-										
-								public Object call() throws Exception {
-									
-									Object __ret = «call.target.name»(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,subarrayDisplacement, subarrayDisplacement+subarrayLength ));
-									«IF call.isIs_then»
-										«call.then.name»();
-									«ENDIF»					
-									return __ret;
-								}
-							});
-							«call.target.name»_«func_ID»_return.add(_f);
-						}
-						
-					'''
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
-					if(call.input.split.equals("row")){ 
-						s+='''
-							JsonObject jsonObject = new JsonParser().parse(myObjectInput).getAsJsonObject();
-							jsonObject = jsonObject.getAsJsonArray("data").get(0).getAsJsonObject();
-							
-							int submatrixRows = jsonObject.get("submatrixRows").getAsInt();
-							int submatrixCols = jsonObject.get("submatrixCols").getAsInt();
-							int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
-							int submatrixDisplacement = jsonObject.get("submatrixDisplacement").getAsInt();
-							
-							subIndex_«id_execution» = submatrixIndex;
-							displ_«id_execution» = submatrixDisplacement;
-							
-							int numThreadsToUse = numThreadsAvailable;
-							if (submatrixRows < numThreadsAvailable) numThreadsToUse = submatrixRows;
-							
-							//Get the type of element inside the matrix and generate the submatrix
-							«typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-								.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-								typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-								)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-												.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-													typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-												)»[submatrixRows][submatrixCols];
-																
-							for (int i = 0, k = submatrixDisplacement; k < (submatrixDisplacement + submatrixRows); i++, k++) {
-							    System.arraycopy(«(call.input.f_index as VariableLiteral).variable.name»[k], 0, subMatrix[i], 0, subMatrix[i].length);
-							}
-							
-							for(int __i=0;__i< numThreadsToUse;__i++){
-								final int i = __i;
-								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-											
-									public Object call() throws Exception {
-										
-										Object __ret = «call.target.name»(subMatrix);
-										«IF call.isIs_then»
-											«call.then.name»();
-										«ENDIF»					
-										return __ret;
-									}
-								});
-								«call.target.name»_«func_ID»_return.add(_f);
-							}
-						'''
-					}else if(call.input.split.equals("col")){
-						s+='''
-							JsonObject jsonObject = new JsonParser().parse(myObjectInput).getAsJsonObject();
-							jsonObject = jsonObject.getAsJsonArray("data").get(0).getAsJsonObject();
-							
-							int submatrixRows = jsonObject.get("submatrixRows").getAsInt();
-							int submatrixCols = jsonObject.get("submatrixCols").getAsInt();
-							int submatrixIndex = jsonObject.get("submatrixIndex").getAsInt();
-							int submatrixDisplacement = jsonObject.get("submatrixDisplacement").getAsInt();
-							
-							subIndex_«id_execution» = submatrixIndex;
-							displ_«id_execution» = submatrixDisplacement;
-							
-							int numThreadsToUse = numThreadsAvailable;
-							if (submatrixCols < numThreadsAvailable) numThreadsToUse = submatrixCols;
-							
-							//Get the type of element inside the matrix and generate the submatrix
-							«typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-								.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-								typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-								)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-												.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-													typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-												)»[submatrixRows][submatrixCols];
-							
-							for (int i = 0; i < submatrixRows; i++){								
-								for (int j = 0, k = submatrixDisplacement; j < submatrixCols; j++, k++) {
-									subMatrix[i][j] = «(call.input.f_index as VariableLiteral).variable.name»[i][k];
-							    }
-							}
-							
-							for(int __i=0;__i< numThreadsToUse;__i++){
-								final int i = __i;
-								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-											
-									public Object call() throws Exception {
-										
-										Object __ret = «call.target.name»(subMatrix);
-										«IF call.isIs_then»
-											«call.then.name»();
-										«ENDIF»					
-										return __ret;
-									}
-								});
-								«call.target.name»_«func_ID»_return.add(_f);
-							}
-						'''
-					}
-			} else { // f_index is a range
-				if (call.isIsAsync && call.isIs_thenall) {
+			if(vmsCreatedCount_«func_ID» != vmCount_«id_execution»){
+				if ( vmsCreatedCount_«func_ID» > 0) «call.environment.environment.get(0).name».downloadFLYProjectonVMCluster();
+				
+				System.out.print("\n\u27A4 Waiting for download project on VM CLuster to complete...");
+				«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
+					while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount_«id_execution»+vmsCreatedCount_«func_ID»));
+				«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
+					while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
+												.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount_«id_execution»+vmsCreatedCount_«func_ID»));
+				«ENDIF»
+			}
+			System.out.println("Done");
+			
+			String mainClass_«func_ID» = "«name»_«call.target.name»";
+			«call.environment.environment.get(0).name».buildFLYProjectOnVMCluster(mainClass_«func_ID»);
+			
+			System.out.print("\n\u27A4 Waiting for building project on VM CLuster to complete...");
+			if(vmsCreatedCount_«func_ID» != vmCount_«id_execution»){
+				«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
+					while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != ( (vmCount_«id_execution»*2)+vmsCreatedCount_«func_ID»));
+				«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
+					while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
+												.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != ( (vmCount_«id_execution»*2)+vmsCreatedCount_«func_ID»));
+				«ENDIF»
+			} else {
+				«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
+					while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount_«id_execution»*2));
+				«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
+					while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
+												.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount_«id_execution»*2));
+				«ENDIF»
+			}
+			System.out.println("Done");
+			'''
+			
+			//Workload splitting on VM Cluster
+			if ((call.input as FunctionInput).is_for_index) { // 'for 'keyword 
+	
+				if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) != null &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
+						equals("HashMap")) { // f_index is a reference to an object
 					s += '''
-						final int __numThread = «((call.input as FunctionInput).f_index as RangeLiteral ).value2 - ((call.input as FunctionInput).f_index as RangeLiteral ).value1» - 1;
+						TO DO
 					'''
+				} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
+						null &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
+						equals("Table")) { // f_index is a reference to a Table
+					s += '''
+						TO DO
+					'''
+				} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
+						null &&
+					typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
+						equals("File")) { // f_index is a txt file	
+						s+='''
+							TO DO
+						'''
+							
+				} else if(call.input.f_index instanceof VariableLiteral &&
+					typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name) !=
+						null &&
+					typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Directory")){
+						s+='''
+							TO DO
+						'''
+				} else if(call.input.f_index instanceof VariableLiteral &&
+					typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")){
+							s+='''
+								int vmCount_«func_ID» = vmCount_«id_execution»;
+								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
+								ArrayList<String> portionInputs_«func_ID» = new ArrayList<String>();
+								int __arr_length_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+														
+								if ( __arr_length_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __arr_length_«func_ID»;
+								
+								int[] dimPortions_«func_ID» = new int[vmCount_«func_ID»]; 
+								int[] displ_«func_ID» = new int[vmCount_«func_ID»]; 
+								int offset_«func_ID» = 0;
+								
+								for(int __i=0;__i<vmCount_«func_ID»;__i++){
+									dimPortions_«func_ID»[__i] = (__arr_length_«func_ID» / vmCount_«func_ID») +
+										((__i < (__arr_length_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
+									displ_«func_ID»[__i] = offset_«func_ID»;								
+									offset_«func_ID» += dimPortions_«func_ID»[__i];
+									
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"subarrayLength\":"+dimPortions_«func_ID»[__i]+",\"subarrayIndex\":"+__i+",\"subarrayDisplacement\":"+displ_«func_ID»[__i]+"}");							
+									portionInputs_«func_ID».add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));
+								}
+								int numberOfFunctions_«func_ID» = vmCount_«func_ID»;
+							'''
+				} else if(call.input.f_index instanceof VariableLiteral &&
+					typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
+						if (call.input.split.equals("row")){ 
+							s+='''
+								int vmCount_«func_ID» = vmCount_«id_execution»;
+								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
+								ArrayList<String> portionInputs_«func_ID» = new ArrayList<String>();
+								
+								int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+								int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
+																					
+								if ( __rows_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __rows_«func_ID»;
+															
+								int[] dimPortions_«func_ID» = new int[vmCount_«func_ID»]; 
+								int[] displ_«func_ID» = new int[vmCount_«func_ID»]; 
+								int offset_«func_ID» = 0;
+															
+								for(int __i=0;__i<vmCount_«func_ID»;__i++){
+									dimPortions_«func_ID»[__i] = (__rows_«func_ID» / vmCount_«func_ID») + ((__i < (__rows_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
+									displ_«func_ID»[__i] = offset_«func_ID»;								
+									offset_«func_ID» += dimPortions_«func_ID»[__i];
+																
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+dimPortions_«func_ID»[__i]+",\"submatrixCols\":"+__cols_«func_ID»+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ_«func_ID»[__i]+"}");							
+									
+									portionInputs_«func_ID».add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));
+								}
+								int numberOfFunctions_«func_ID» = vmCount_«func_ID»;
+							'''
+						}else if (call.input.split.equals("col")){ 
+							s+='''
+								int vmCount_«func_ID» = vmCount_«id_execution»;
+								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
+								ArrayList<String> portionInputs_«func_ID» = new ArrayList<String>();
+								
+								int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+								int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
+								
+								if ( __cols_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __cols_«func_ID»;
+															
+								int[] dimPortions_«func_ID» = new int[vmCount_«func_ID»]; 
+								int[] displ_«func_ID» = new int[vmCount_«func_ID»]; 
+								int offset_«func_ID» = 0;
+																
+								for(int __i=0;__i<vmCount_«func_ID»;__i++){
+									dimPortions_«func_ID»[__i] = (__cols_«func_ID» / vmCount_«func_ID») +
+																			((__i < (__cols_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
+									displ_«func_ID»[__i] = offset_«func_ID»;
+									offset_«func_ID» += dimPortions_«func_ID»[__i];
+									
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+__rows_«func_ID»+",\"submatrixCols\":"+dimPortions_«func_ID»[__i]+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ_«func_ID»[__i]+"}");							
+									
+									portionInputs_«func_ID».add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));						
+								}
+								int numberOfFunctions_«func_ID» = vmCount_«func_ID»;
+							'''
+						}
+				} else { // f_index is a range
+					//TO FIX
+					var value2 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l2) !== null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l2.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value2  ;
+					s += '''
+						int vmCount_«func_ID» = vmCount_«id_execution»;
+						for(int i=0; i<vmCount_«func_ID»;i++){
+						            dimPortions_«func_ID»[i] = («value2» / vmCount_«func_ID») +
+						                            ((i < («value2» % vmCount_«func_ID»)) ? 1 : 0);
+						            displ_«func_ID»[i] = offset_«func_ID»;
+						            offset_«func_ID» += dimPortions_«func_ID»[i];
+						}
+						int numberOfFunctions_«func_ID» = «value2»;
+					'''
+				}
+			} else { // no 'in' keyword
+	
+					s += '''
+						TO DO
+					'''
+			}
+			
+			//Start waiting for results and execute FLY func on VM Cluster
+			s += '''
+				«FOR el: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+					«IF !(el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")»
+						«generateChannelWaitingResultsForVMCluster(el)»
+					«ENDIF»
+				«ENDFOR»
+				
+				«call.environment.environment.get(0).name».executeFLYonVMCluster(portionInputs_«func_ID»,
+																	numberOfFunctions_«func_ID»,
+																	__id_execution);
+				
+				System.out.print("\n\u27A4 Waiting for FLY execution to complete...");
+				if(vmsCreatedCount_«func_ID» != vmCount_«id_execution»){
+					«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
+						while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != ( (vmCount_«id_execution»*3)+vmsCreatedCount_«func_ID»));
+					«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
+						while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
+													.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != ( (vmCount_«id_execution»*3)+vmsCreatedCount_«func_ID»));
+					«ENDIF»
+				} else {
+					«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
+						while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount_«id_execution»*3));
+					«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
+						while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
+													.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount_«id_execution»*3));
+					«ENDIF»
+				}
+				«FOR el: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
+				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+					«IF !(el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")»
+						__wait_on_«el.name» = false;
+						System.out.println("Done");
+					«ENDIF»
+				«ENDFOR»
+				
+				//Check for execution errors
+				String err_«func_ID» = «call.environment.environment.get(0).name».checkForExecutionErrors(numberOfFunctions_«func_ID»);
+				if (err_«func_ID» != null) {
+					//Print the error within each VM
+					System.out.println("The execution failed with the following errors in each VM:");
+					System.out.println(err_«func_ID»);
+				}else {
+					//No execution errors
+					«IF call.isIs_thenall»
+						«call.thenall.name»();
+					«ENDIF»
 				}
 				
-				var value1 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l1) != null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l1.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value1  ;
-				var value2 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l2) != null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l2.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value2  ;
-
-				s += '''
-					int dimPortion = Integer.parseInt(args[0]); //dimPortion
-					// args[1], start index -- in range literal could be not used
-					
-					for(int _i=«value1»;_i<dimPortion;_i++){
-						final int __i = _i;
-						Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-							
-							public Object call() throws Exception {
-								// TODO Auto-generated method stub
-								
-								Object __ret = «call.target.name»(«IF call.target.parameters.length==1»__i«ENDIF»);
-								«IF call.isIs_then»
-									«call.then.name»();
-								«ENDIF»
-								«IF call.isIsAsync && call.isIs_thenall»
-									if(__count.getAndIncrement()==__numThread){
-										__asyncTermination.put("Termination");
-									}
-								«ENDIF»   						
-								return __ret;
-							}
-						});
-						«call.target.name»_«func_ID»_return.add(_f);
-					}
-				'''
-			}
-			last_func_result = call.target.name + "_" + func_ID + "_return"
-
-			if (!call.isAsync) {
-				s += '''
-					for(Future _f : «call.target.name»_«func_ID»_return){
-						try{
-							_f.get();
-						} catch(Exception e){
-							e.printStackTrace();
-						}
-					}
-					
-				'''
-			}
-
-			if (call.isIsAsync && call.isIs_thenall) {
-				s += '''
-					Future<Object> __call = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-											
-							public Object call() throws Exception {
-								//TODO Auto-generated method stub
-										__asyncTermination.take();	
-										«call.thenall.name»();
-								return null;
-							}
-						});
-						
-				'''
-			}
-
-		} else { // no 'in' keyword
-			var par_id = 0
-			var par_1 = ''' 
-			''' // parameter declaration
-			var par_2 = '''
-			''' // passing parameter 
-			for (el : call.input.expressions) {
-				par_1 += '''
-					final Object _par_«par_id» = «generateArithmeticExpression(el,scope)»;
-				'''
-				par_2 += ''' _par_«par_id»	'''
-				if (el != call.input.expressions.last) {
-					par_2 += ''','''
-				}
-				par_id++
-			}
-			s += '''
-				«par_1»
-				Future<Object> _f_«func_ID» = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-					
-					public Object call() throws Exception {
-						// TODO Auto-generated method stub
-											
-						return «call.target.name»(«par_2»);
-					}
-				});
+				«FOR el: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
+				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+					«IF !(el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")»
+						//Delete results queue
+						__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(__sqs_«el.environment.get(0).name».getQueueUrl("«el.name»-"+__id_execution).getQueueUrl()));
+						//Delete documents with commands
+						«el.environment.get(0).name».cleanResources();
+					«ENDIF»
+				«ENDFOR»
 			'''
-			if (!call.isIsAsync) {
-				s += '''
-					try{
-						_f_«func_ID».get();
-						«IF call.is_then »
-							«call.then.name»();
-						«ENDIF»
-					} catch(Exception e){
-						e.printStackTrace();
-					}
-				'''
-			}
-		}
+
 		func_ID++
 		return s
 	}
+	
+		
+	def generateChannelWaitingResultsForVMCluster(VariableDeclaration dec) {
+		var env = ((dec.environment.get(0).right as DeclarationObject).features.get(0)).value_s
+		var env_name = dec.environment.get(0).name
+		var local_env = res.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+			filter[(right as DeclarationObject).features.get(0).value_s.equals("smp")].get(0)
+		var local = local_env.name
+		switch env {
+			case "aws":
+			return '''
+				__sqs_«env_name».createQueue(new CreateQueueRequest("«dec.name»-"+__id_execution));
+				
+				for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
+					__thread_pool_«local».submit(new Callable<Object>() {
+						@Override
+						public Object call() throws Exception {
+							while(__wait_on_«dec.name») {
+								ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__sqs_«env_name».getQueueUrl("«dec.name»-"+__id_execution).getQueueUrl()).
+										withWaitTimeSeconds(1).withMaxNumberOfMessages(10);
+								ReceiveMessageResult __res = __sqs_«env_name».receiveMessage(__recmsg);
+								for(Message msg : __res.getMessages()) { 
+									«dec.name».put(msg.getBody());
+									__sqs_«env_name».deleteMessage(__sqs_«env_name».getQueueUrl("«dec.name»-"+__id_execution).getQueueUrl(), msg.getReceiptHandle());
+								}
+							}
+							return null;
+						}
+					});
+				}
+			'''
+		case "azure":
+			return '''
+				«env_name».setupQueue("«dec.name»-"+__id_execution);
+
+				for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
+					__thread_pool_«local».submit(new Callable<Object>() {
+						@Override
+						public Object call() throws Exception {
+							while(__wait_on_«dec.name») {
+								List<String> __recMsgs = «env_name».peeksFromQueue("«dec.name»-"+__id_execution,32);
+								for(String msg : __recMsgs) { 
+									«dec.name».put(msg);
+								}
+							}
+							return null;
+						}
+					});
+				}
+			'''
+			}	
+	}
+	
 
 	def generateLocalFlyFunction(FlyFunctionCall call, String scope) {
 		var s = ''''''
