@@ -153,7 +153,13 @@ class FLYGenerator extends AbstractGenerator {
 		}
 	}
 	
-	def CharSequence compileJavaForVMCluster(Resource resource) '''
+	def CharSequence compileJavaForVMCluster(Resource resource){
+	var termination_init_counter = 0
+	var termination_counter = 0
+	func_termination_counter = 0
+	
+	var s = ""
+	s += '''
 	import java.io.File;
 	import java.io.FileInputStream;
 	import java.io.InputStreamReader;
@@ -258,6 +264,9 @@ class FLYGenerator extends AbstractGenerator {
 				«generateConstantDeclaration(element,"main")»	
 			«ENDIF»
 		«ENDFOR»
+		«FOR element : resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
+			static boolean __wait_on_termination_«element.target.name»_«termination_init_counter++» = true;
+		«ENDFOR»
 				
 		public static void main(String[] args){
 			«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
@@ -291,13 +300,6 @@ class FLYGenerator extends AbstractGenerator {
 				«element.name».VMClusterInit();
 				«element.name».setupQueue(terminationQueue);
 			«ENDFOR»
-				
-			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-			filter[((right as DeclarationObject).features.get(0).value_s.equals("aws"))]»
-				__sqs_«element.name».createQueue(new CreateQueueRequest("ch-termination-"+__id_execution));
-				terminationQueue = __sqs_«element.name».getQueueUrl("ch-termination-"+__id_execution).getQueueUrl();					
-				«element.name» = new AWSClient(creds, "«(element.right as DeclarationObject).features.get(4).value_s»", terminationQueue);
-			«ENDFOR»
 			
 			try{
 				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[(environment.right as DeclarationObject).features.get(0).value_s.equals("vm-cluster")]»
@@ -307,6 +309,17 @@ class FLYGenerator extends AbstractGenerator {
 						«ENDIF»
 					«ENDFOR»
 				«ENDFOR»
+				
+				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
+						«generateTerminationQueue(element, termination_counter++)»
+				«ENDFOR»
+				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
+					filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+					«IF !(element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp")»
+						«generateChanelDeclarationForCloud(element)»
+					«ENDIF»
+				«ENDFOR»
+
 								
 				«FOR element : resource.allContents.toIterable.filter(Expression)»
 					«IF checkBlock(element.eContainer)==false»
@@ -326,7 +339,7 @@ class FLYGenerator extends AbstractGenerator {
 				«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
 				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
 					«IF (el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws")»
-					__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(terminationQueue));
+					//Delete queues at the same way you create them
 					«ENDIF»
 				«ENDFOR»
 				
@@ -363,6 +376,7 @@ class FLYGenerator extends AbstractGenerator {
 	}
 		
 	'''
+	}
 
 	
 	def CharSequence compileJavaFunctionsForVMCluster(Resource resource, FlyFunctionCall funcCall) '''
@@ -848,414 +862,414 @@ class FLYGenerator extends AbstractGenerator {
 	import tech.tablesaw.api.IntColumn;
 	import org.json.JSONObject;
 	
-		«IF checkAWS() || checkAWSDebug()»
-	import com.amazonaws.AmazonClientException;
-	import com.amazonaws.auth.AWSStaticCredentialsProvider;
-	import com.amazonaws.auth.BasicAWSCredentials;
-	import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-	import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
-	import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
-	import com.amazonaws.services.identitymanagement.model.CreateRoleRequest;
-	import com.amazonaws.services.identitymanagement.model.CreateRoleResult;
-	import com.amazonaws.services.identitymanagement.model.DeleteRolePolicyRequest;
-	import com.amazonaws.services.identitymanagement.model.DeleteRoleRequest;
-	import com.amazonaws.services.identitymanagement.model.PutRolePolicyRequest;
-	import com.amazonaws.services.lambda.AWSLambda;
-	import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
-	import com.amazonaws.services.lambda.model.AddPermissionRequest;
-	import com.amazonaws.services.lambda.model.AddPermissionResult;
-	import com.amazonaws.services.lambda.model.CreateFunctionRequest;
-	import com.amazonaws.services.lambda.model.CreateFunctionResult;
-	import com.amazonaws.services.lambda.model.DeleteFunctionRequest;
-	import com.amazonaws.services.lambda.model.FunctionCode;
-	import com.amazonaws.services.lambda.model.InvokeRequest;
-	import com.amazonaws.services.sqs.AmazonSQS;
-	import com.amazonaws.services.sqs.model.Message;
-	import com.amazonaws.services.sqs.AmazonSQSClient;
-	import com.amazonaws.services.sqs.model.CreateQueueRequest;
-	import com.amazonaws.services.sqs.model.CreateQueueResult;
-	import com.amazonaws.services.sqs.model.ReceiveMessageRequest;
-	import com.amazonaws.services.sqs.model.ReceiveMessageResult;
-	import com.amazonaws.services.sqs.model.SendMessageRequest;
-	import com.amazonaws.services.sqs.model.AmazonSQSException;
-	import com.amazonaws.services.sqs.model.GetQueueAttributesRequest;
-	import com.amazonaws.services.sqs.model.GetQueueUrlResult;
-	import com.amazonaws.services.sqs.model.DeleteQueueRequest;
-	import com.amazonaws.services.identitymanagement.model.GetRoleRequest;
-	import com.amazonaws.services.identitymanagement.model.GetRoleResult;
-	import com.amazonaws.services.s3.AmazonS3;
-	import com.amazonaws.services.s3.AmazonS3Client;
-	import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-	import com.amazonaws.services.s3.model.AmazonS3Exception;
-	import com.amazonaws.services.s3.model.Bucket;
-	import com.amazonaws.services.s3.model.CannedAccessControlList;
-	import com.amazonaws.services.s3.model.PutObjectRequest;
-	import com.amazonaws.services.s3.model.ListObjectsV2Result;
-	import com.amazonaws.services.s3.model.PutObjectRequest;
-	import com.amazonaws.services.s3.model.S3ObjectSummary;
-	import com.amazonaws.services.rds.AmazonRDS;
-	import com.amazonaws.services.rds.AmazonRDSClient;
-	import com.amazonaws.services.rds.model.DBInstance;
-	import com.amazonaws.services.rds.model.DescribeDBInstancesRequest;
-	import com.amazonaws.services.rds.model.DescribeDBInstancesResult;
-	import com.amazonaws.services.rds.model.Endpoint;
+	«IF checkAWS() || checkAWSDebug()»
+		import com.amazonaws.AmazonClientException;
+		import com.amazonaws.auth.AWSStaticCredentialsProvider;
+		import com.amazonaws.auth.BasicAWSCredentials;
+		import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+		import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
+		import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
+		import com.amazonaws.services.identitymanagement.model.CreateRoleRequest;
+		import com.amazonaws.services.identitymanagement.model.CreateRoleResult;
+		import com.amazonaws.services.identitymanagement.model.DeleteRolePolicyRequest;
+		import com.amazonaws.services.identitymanagement.model.DeleteRoleRequest;
+		import com.amazonaws.services.identitymanagement.model.PutRolePolicyRequest;
+		import com.amazonaws.services.lambda.AWSLambda;
+		import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
+		import com.amazonaws.services.lambda.model.AddPermissionRequest;
+		import com.amazonaws.services.lambda.model.AddPermissionResult;
+		import com.amazonaws.services.lambda.model.CreateFunctionRequest;
+		import com.amazonaws.services.lambda.model.CreateFunctionResult;
+		import com.amazonaws.services.lambda.model.DeleteFunctionRequest;
+		import com.amazonaws.services.lambda.model.FunctionCode;
+		import com.amazonaws.services.lambda.model.InvokeRequest;
+		import com.amazonaws.services.sqs.AmazonSQS;
+		import com.amazonaws.services.sqs.model.Message;
+		import com.amazonaws.services.sqs.AmazonSQSClient;
+		import com.amazonaws.services.sqs.model.CreateQueueRequest;
+		import com.amazonaws.services.sqs.model.CreateQueueResult;
+		import com.amazonaws.services.sqs.model.ReceiveMessageRequest;
+		import com.amazonaws.services.sqs.model.ReceiveMessageResult;
+		import com.amazonaws.services.sqs.model.SendMessageRequest;
+		import com.amazonaws.services.sqs.model.AmazonSQSException;
+		import com.amazonaws.services.sqs.model.GetQueueAttributesRequest;
+		import com.amazonaws.services.sqs.model.GetQueueUrlResult;
+		import com.amazonaws.services.sqs.model.DeleteQueueRequest;
+		import com.amazonaws.services.identitymanagement.model.GetRoleRequest;
+		import com.amazonaws.services.identitymanagement.model.GetRoleResult;
+		import com.amazonaws.services.s3.AmazonS3;
+		import com.amazonaws.services.s3.AmazonS3Client;
+		import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+		import com.amazonaws.services.s3.model.AmazonS3Exception;
+		import com.amazonaws.services.s3.model.Bucket;
+		import com.amazonaws.services.s3.model.CannedAccessControlList;
+		import com.amazonaws.services.s3.model.PutObjectRequest;
+		import com.amazonaws.services.s3.model.ListObjectsV2Result;
+		import com.amazonaws.services.s3.model.PutObjectRequest;
+		import com.amazonaws.services.s3.model.S3ObjectSummary;
+		import com.amazonaws.services.rds.AmazonRDS;
+		import com.amazonaws.services.rds.AmazonRDSClient;
+		import com.amazonaws.services.rds.model.DBInstance;
+		import com.amazonaws.services.rds.model.DescribeDBInstancesRequest;
+		import com.amazonaws.services.rds.model.DescribeDBInstancesResult;
+		import com.amazonaws.services.rds.model.Endpoint;
 
-		«ENDIF»
-		«IF checkAWSDebug()»
-	import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
-		«ENDIF»
+	«ENDIF»
+	«IF checkAWSDebug()»
+		import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
+	«ENDIF»
 	import com.google.gson.Gson;
 	import com.google.gson.JsonArray;
 	import com.google.gson.JsonObject;
 	import com.google.gson.JsonParser;
 	import com.google.gson.reflect.TypeToken;
-		«IF checkAzure()»
-	import com.microsoft.azure.management.resources.fluentcore.arm.Region;
-	import isislab.azureclient.AzureClient;
-		«ENDIF»
+	«IF checkAzure()»
+		import com.microsoft.azure.management.resources.fluentcore.arm.Region;
+		import isislab.azureclient.AzureClient;
+	«ENDIF»
 		
-		public class «name» {
-			
-			static HashMap<String,HashMap<String, Object>> __fly_environment = new HashMap<String,HashMap<String,Object>>();
-			static HashMap<String,HashMap<String,Integer>> __fly_async_invocation_id = new HashMap<String,HashMap<String,Integer>>();
-			static final String __environment = "smp";
-			static long  __id_execution =  System.currentTimeMillis();
-			«FOR element : (resource.allContents.toIterable.filter(Expression))»
-				«IF element instanceof VariableDeclaration»
-					«IF element.right instanceof DeclarationObject 
-						&& ( (element.right as DeclarationObject).features.get(0).value_s.equals("channel") || list_environment.contains((element.right as DeclarationObject).features.get(0).value_s) )»
-						«generateVariableDeclaration(element,"main")»
-					«ENDIF»
+	public class «name» {
+		
+		static HashMap<String,HashMap<String, Object>> __fly_environment = new HashMap<String,HashMap<String,Object>>();
+		static HashMap<String,HashMap<String,Integer>> __fly_async_invocation_id = new HashMap<String,HashMap<String,Integer>>();
+		static final String __environment = "smp";
+		static long  __id_execution =  System.currentTimeMillis();
+		«FOR element : (resource.allContents.toIterable.filter(Expression))»
+			«IF element instanceof VariableDeclaration»
+				«IF element.right instanceof DeclarationObject 
+					&& ( (element.right as DeclarationObject).features.get(0).value_s.equals("channel") || list_environment.contains((element.right as DeclarationObject).features.get(0).value_s) )»
+					«generateVariableDeclaration(element,"main")»
 				«ENDIF»
-				«IF element instanceof ConstantDeclaration»
-					«generateConstantDeclaration(element,"main")»	
-				«ENDIF»
+			«ENDIF»
+			«IF element instanceof ConstantDeclaration»
+				«generateConstantDeclaration(element,"main")»	
+			«ENDIF»
+		«ENDFOR»
+		«FOR element : resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
+			static boolean __wait_on_termination_«element.target.name»_«termination_init_counter++» = true;
+		«ENDFOR»
+		
+		public static void main(String[] args) throws Exception{
+			«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
+				«initialiseConstant(element,"main")»
 			«ENDFOR»
-			«FOR element : resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-				static boolean __wait_on_termination_«element.target.name»_«termination_init_counter++» = true;
-			«ENDFOR»
-			
-			public static void main(String[] args) throws Exception{
-				«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
-					«initialiseConstant(element,"main")»
-				«ENDFOR»
-				«IF checkAWSDebug()»
-				Runtime.getRuntime().exec("chmod +x src-gen/docker-compose-script.sh");
-				ProcessBuilder __processBuilder_docker_compose = new ProcessBuilder("/bin/bash", "-c", "src-gen/docker-compose-script.sh");
-				Map<String, String> __env_docker_compose = __processBuilder_docker_compose.environment();
-				String __path_env_docker_compose = __env_docker_compose.get("PATH");
-				if (!__path_env_docker_compose.contains("/usr/local/bin")) {
-					 __env_docker_compose.put("PATH", __path_env_docker_compose+":/usr/local/bin");
+			«IF checkAWSDebug()»
+			Runtime.getRuntime().exec("chmod +x src-gen/docker-compose-script.sh");
+			ProcessBuilder __processBuilder_docker_compose = new ProcessBuilder("/bin/bash", "-c", "src-gen/docker-compose-script.sh");
+			Map<String, String> __env_docker_compose = __processBuilder_docker_compose.environment();
+			String __path_env_docker_compose = __env_docker_compose.get("PATH");
+			if (!__path_env_docker_compose.contains("/usr/local/bin")) {
+				 __env_docker_compose.put("PATH", __path_env_docker_compose+":/usr/local/bin");
+			}
+			Process __p_docker_compose;
+			try {
+				__p_docker_compose = __processBuilder_docker_compose.start();
+				BufferedReader __p_docker_compose_output = new BufferedReader(new InputStreamReader(__p_docker_compose.getInputStream()));
+				String __docker_compose_output_line = __p_docker_compose_output.readLine();
+				while(__docker_compose_output_line !=null) {
+					System.out.println(__docker_compose_output_line);
+					if (__docker_compose_output_line.contains("Ready."))
+						break;
+					__docker_compose_output_line=__p_docker_compose_output.readLine();
 				}
-				Process __p_docker_compose;
-				try {
-					__p_docker_compose = __processBuilder_docker_compose.start();
-					BufferedReader __p_docker_compose_output = new BufferedReader(new InputStreamReader(__p_docker_compose.getInputStream()));
-					String __docker_compose_output_line = __p_docker_compose_output.readLine();
-					while(__docker_compose_output_line !=null) {
-						System.out.println(__docker_compose_output_line);
-						if (__docker_compose_output_line.contains("Ready."))
-							break;
-						__docker_compose_output_line=__p_docker_compose_output.readLine();
-					}
-				} catch (Exception e) {
-					e.printStackTrace();
-				}		
-				«ENDIF»
-				«FOR element : resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]»
-					«setEnvironmentDeclarationInfo(element)»
-				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-					&& !((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
-					ExecutorService __thread_pool_«element.name» = Executors.newFixedThreadPool((int) __fly_environment.get("«resource.allContents.toIterable.filter(VariableDeclaration)
-					.filter[right instanceof DeclarationObject].filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))].get(0).name»").get("nthread"));
-				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
-					«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
-						"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
-						"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
-						"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
-						__id_execution+"",
-						"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»");
-					«element.name».init();
-					«element.name».createFunctionApp("flyapp«element.name»","«(element.right as DeclarationObject).features.get(6).value_s»");
-				«ENDFOR»
-				«IF resource.allContents.toIterable.filter(FlyFunctionCall)
-				.filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")].length > 0»
-					ExecutorService __thread_pool_deploy_on_cloud = Executors.newFixedThreadPool((int) __fly_environment.get("«resource.allContents.toIterable.filter(VariableDeclaration)
-					.filter[right instanceof DeclarationObject].filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))].get(0).name»").get("nthread"));	
-					ArrayList<Future<Object>> __termination_deploy_on_cloud = new ArrayList();		
-					«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall)
-					.filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-						«deployFlyFunctionOnCloud(element)»
-					«ENDFOR»
-					for (Future<Object> f: __termination_deploy_on_cloud){
-						try {
-							f.get();
-						} catch (InterruptedException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						} catch (ExecutionException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-					System.out.println("Deploy effettuato");
-				«ENDIF»
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-					«IF !(element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp")»
-					«generateChanelDeclarationForCloud(element)»
-					«ELSEIF (element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp") &&
-						(element.environment.get(0).right as DeclarationObject).features.length==3»
-						«generateChannelDeclarationForLanguage(element)»
-					«ENDIF»
-				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-						«generateTerminationQueue(element, termination_counter++)»
-				«ENDFOR»
-				
-				«FOR element : resource.allContents.toIterable.filter(Expression)»
-					«IF checkBlock(element.eContainer)==false»
-						«generateExpression(element,"main")»
-					«ENDIF»
-				«ENDFOR»
+			} catch (Exception e) {
+				e.printStackTrace();
+			}		
+			«ENDIF»
+			«FOR element : resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+			filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]»
+				«setEnvironmentDeclarationInfo(element)»
+			«ENDFOR»
+			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+			filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+				&& !((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
+				ExecutorService __thread_pool_«element.name» = Executors.newFixedThreadPool((int) __fly_environment.get("«resource.allContents.toIterable.filter(VariableDeclaration)
+				.filter[right instanceof DeclarationObject].filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+				&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))].get(0).name»").get("nthread"));
+			«ENDFOR»
+			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+			filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
+				«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
+					"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
+					"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
+					"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
+					__id_execution+"",
+					"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»");
+				«element.name».init();
+				«element.name».createFunctionApp("flyapp«element.name»","«(element.right as DeclarationObject).features.get(6).value_s»");
+			«ENDFOR»
+			«IF resource.allContents.toIterable.filter(FlyFunctionCall)
+			.filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")].length > 0»
+				ExecutorService __thread_pool_deploy_on_cloud = Executors.newFixedThreadPool((int) __fly_environment.get("«resource.allContents.toIterable.filter(VariableDeclaration)
+				.filter[right instanceof DeclarationObject].filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+				&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))].get(0).name»").get("nthread"));	
+				ArrayList<Future<Object>> __termination_deploy_on_cloud = new ArrayList();		
 				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall)
-				.filter[!(environment.right as DeclarationObject).features.get(0).equals("smp")]»
-					«undeployFlyFunctionOnCloud(element)»
+				.filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
+					«deployFlyFunctionOnCloud(element)»
 				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
-					__thread_pool_«element.name».shutdown();
-				«ENDFOR»
-				System.exit(0);
-			}
-				
-			«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
-				«IF checkBlock(element.eContainer)==false»
-					«generateFunctionDefinition(element)»
-				«ENDIF»	
-			«ENDFOR»	
-
-			private static String __generateString(Table t,int id) {
-				StringBuilder b = new StringBuilder();
-				b.append("{\"id\":\""+id+"\",\"data\":");
-				b.append("[");
-				int i_r = t.rowCount();
-				for(Row r : t) {
-					b.append('{');
-					for (int i=0;i< r.columnCount();i++) {
-						b.append("\""+ r.columnNames().get(i) +"\":\""+r.getObject(i)+ ((i<r.columnCount()-1)?"\",":""));
+				for (Future<Object> f: __termination_deploy_on_cloud){
+					try {
+						f.get();
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					} catch (ExecutionException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
 					}
-					b.append("\"}"+(((i_r != 1 ))?",":""));
-					i_r--;
 				}
-				b.append("]}");
-				return b.toString();
-			}
+				System.out.println("Deploy effettuato");
+			«ENDIF»
+			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
+			filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
+				«IF !(element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp")»
+				«generateChanelDeclarationForCloud(element)»
+				«ELSEIF (element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp") &&
+					(element.environment.get(0).right as DeclarationObject).features.length==3»
+					«generateChannelDeclarationForLanguage(element)»
+				«ENDIF»
+			«ENDFOR»
+			«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
+					«generateTerminationQueue(element, termination_counter++)»
+			«ENDFOR»
 			
-			private static String __generateString(String s,int id) {
-				StringBuilder b = new StringBuilder();
-				b.append("{\"id\":"+id+",\"data\":");
-				b.append("[");
-				String[] tmp = s.split("\n");
-				for(String t: tmp){
-					b.append(t);
-					if(t != tmp[tmp.length-1]){
-						b.append(",");
-					} 
+			«FOR element : resource.allContents.toIterable.filter(Expression)»
+				«IF checkBlock(element.eContainer)==false»
+					«generateExpression(element,"main")»
+				«ENDIF»
+			«ENDFOR»
+			«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall)
+			.filter[!(environment.right as DeclarationObject).features.get(0).equals("smp")]»
+				«undeployFlyFunctionOnCloud(element)»
+			«ENDFOR»
+			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
+			filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
+				&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
+				__thread_pool_«element.name».shutdown();
+			«ENDFOR»
+			System.exit(0);
+		}
+			
+		«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
+			«IF checkBlock(element.eContainer)==false»
+				«generateFunctionDefinition(element)»
+			«ENDIF»	
+		«ENDFOR»	
+
+		private static String __generateString(Table t,int id) {
+			StringBuilder b = new StringBuilder();
+			b.append("{\"id\":\""+id+"\",\"data\":");
+			b.append("[");
+			int i_r = t.rowCount();
+			for(Row r : t) {
+				b.append('{');
+				for (int i=0;i< r.columnCount();i++) {
+					b.append("\""+ r.columnNames().get(i) +"\":\""+r.getObject(i)+ ((i<r.columnCount()-1)?"\",":""));
 				}
-				b.append("]}");
-				return b.toString();
+				b.append("\"}"+(((i_r != 1 ))?",":""));
+				i_r--;
+			}
+			b.append("]}");
+			return b.toString();
+		}
+		
+		private static String __generateString(String s,int id) {
+			StringBuilder b = new StringBuilder();
+			b.append("{\"id\":"+id+",\"data\":");
+			b.append("[");
+			String[] tmp = s.split("\n");
+			for(String t: tmp){
+				b.append(t);
+				if(t != tmp[tmp.length-1]){
+					b.append(",");
+				} 
+			}
+			b.append("]}");
+			return b.toString();
+		}
+
+		private static List <Table> __generateTableFromNoSQLQuery(MongoCursor <Document> ___mongoCursor) {
+			List <Table> ___resultGenerateTableFromNoSQLQuery = new ArrayList <> ();
+
+			if(!___mongoCursor.hasNext()) 
+				return ___resultGenerateTableFromNoSQLQuery;
+
+			org.json.JSONObject ___jsonObject;
+			ArrayList <ArrayList <String>> ___listFeatures = new ArrayList <> ();
+			ArrayList <org.json.JSONArray> ___listObjects = new ArrayList <> ();
+
+			while(___mongoCursor.hasNext()) {
+				___jsonObject = new org.json.JSONObject(___mongoCursor.next().toJson());
+				Iterator <String> ___iteratorJsonObjectKeys = ___jsonObject.keys();
+				ArrayList <String> ___listFeaturesCurrent = new ArrayList <String> ();
+
+				while(___iteratorJsonObjectKeys.hasNext())
+					___listFeaturesCurrent.add(___iteratorJsonObjectKeys.next());
+
+				int ___i = 0;
+				for(; ___i < ___listFeatures.size(); ++___i)
+					if(___listFeatures.get(___i).equals(___listFeaturesCurrent))
+						break;
+
+				if(___i >= ___listFeatures.size()) {
+					___listFeatures.add(___listFeaturesCurrent);
+					org.json.JSONArray ___listObjectForThisFeatures = new org.json.JSONArray();
+					___listObjectForThisFeatures.put(___jsonObject);
+					___listObjects.add(___listObjectForThisFeatures);
+				} else
+					___listObjects.get(___i).put(___jsonObject);
 			}
 
-			private static List <Table> __generateTableFromNoSQLQuery(MongoCursor <Document> ___mongoCursor) {
-				List <Table> ___resultGenerateTableFromNoSQLQuery = new ArrayList <> ();
+			for(int ___i = 0; ___i < ___listFeatures.size(); ++___i) {
+				Table ___table = Table.create();
+				ArrayList <String> ___features = ___listFeatures.get(___i);
+				org.json.JSONArray ___objects = ___listObjects.get(___i);
 
-				if(!___mongoCursor.hasNext()) 
-					return ___resultGenerateTableFromNoSQLQuery;
+				for(Column <?> ___column : ___generateColumns("", ___features, ___objects))
+					___table.addColumns(___column);
 
-				org.json.JSONObject ___jsonObject;
-				ArrayList <ArrayList <String>> ___listFeatures = new ArrayList <> ();
-				ArrayList <org.json.JSONArray> ___listObjects = new ArrayList <> ();
+				___resultGenerateTableFromNoSQLQuery.add(___table);
+			}			
+			return 	___resultGenerateTableFromNoSQLQuery;		
 
-				while(___mongoCursor.hasNext()) {
-					___jsonObject = new org.json.JSONObject(___mongoCursor.next().toJson());
-					Iterator <String> ___iteratorJsonObjectKeys = ___jsonObject.keys();
-					ArrayList <String> ___listFeaturesCurrent = new ArrayList <String> ();
+		}
 
-					while(___iteratorJsonObjectKeys.hasNext())
-						___listFeaturesCurrent.add(___iteratorJsonObjectKeys.next());
+		private static List <Column <?>> ___generateColumns(
+				String ___nameColumn, List <String> ___features, org.json.JSONArray ___objects) {
+			List <Column <?>> ___columns = new ArrayList <> ();
+			int ___j = 0;
 
-					int ___i = 0;
-					for(; ___i < ___listFeatures.size(); ++___i)
-						if(___listFeatures.get(___i).equals(___listFeaturesCurrent))
-							break;
+			for(String ___feature : ___features) {				
+				org.json.JSONObject ___object = ___objects.getJSONObject(0);
+				Object ___value = ___object.get(___feature);
 
-					if(___i >= ___listFeatures.size()) {
-						___listFeatures.add(___listFeaturesCurrent);
-						org.json.JSONArray ___listObjectForThisFeatures = new org.json.JSONArray();
-						___listObjectForThisFeatures.put(___jsonObject);
-						___listObjects.add(___listObjectForThisFeatures);
-					} else
-						___listObjects.get(___i).put(___jsonObject);
-				}
+				if(___value instanceof org.json.JSONObject) {
+					___columns.add(StringColumn.create(___feature, ((org.json.JSONObject) ___value).toString()));
 
-				for(int ___i = 0; ___i < ___listFeatures.size(); ++___i) {
-					Table ___table = Table.create();
-					ArrayList <String> ___features = ___listFeatures.get(___i);
-					org.json.JSONArray ___objects = ___listObjects.get(___i);
+					for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+						___object = ___objects.getJSONObject(___i);
+						___value = ___object.get(___feature);
 
-					for(Column <?> ___column : ___generateColumns("", ___features, ___objects))
-						___table.addColumns(___column);
+						((StringColumn) ___columns.get(___j)).append(((org.json.JSONObject) ___value).toString());
+					}
+					++___j;
 
-					___resultGenerateTableFromNoSQLQuery.add(___table);
-				}			
-				return 	___resultGenerateTableFromNoSQLQuery;		
+				} else if(___value instanceof org.json.JSONArray) {
+					___columns.add(StringColumn.create(___feature, ((org.json.JSONArray) ___value).toString()));
 
-			}
+					for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+						___object = ___objects.getJSONObject(___i);
+						___value = ___object.get(___feature);
 
-			private static List <Column <?>> ___generateColumns(
-					String ___nameColumn, List <String> ___features, org.json.JSONArray ___objects) {
-				List <Column <?>> ___columns = new ArrayList <> ();
-				int ___j = 0;
+						((StringColumn) ___columns.get(___j)).append(((org.json.JSONArray) ___value).toString());
+					}
+					++___j;
 
-				for(String ___feature : ___features) {				
-					org.json.JSONObject ___object = ___objects.getJSONObject(0);
-					Object ___value = ___object.get(___feature);
+				} else {
 
-					if(___value instanceof org.json.JSONObject) {
-						___columns.add(StringColumn.create(___feature, ((org.json.JSONObject) ___value).toString()));
+					if(___value instanceof Integer) {
+						IntColumn ___columnToAdd = IntColumn.create(___nameColumn + ___feature);
+						___columnToAdd.append((Integer) ___value);
+						___columns.add(___columnToAdd);
+					} else				
+						___columns.add(StringColumn.create(___nameColumn +___feature, "" + ___value));
 
-						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
-							___object = ___objects.getJSONObject(___i);
-							___value = ___object.get(___feature);
+					for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
+						___object = ___objects.getJSONObject(___i);
+						___value = ___object.get(___feature);
 
-							((StringColumn) ___columns.get(___j)).append(((org.json.JSONObject) ___value).toString());
-						}
-						++___j;
+						if(___value instanceof Integer)
+							((IntColumn) ___columns.get(___j)).append((Integer) ___value);
+						else
+							((StringColumn) ___columns.get(___j)).append("" + ___value);					
+					}
+					++___j;
 
-					} else if(___value instanceof org.json.JSONArray) {
-						___columns.add(StringColumn.create(___feature, ((org.json.JSONArray) ___value).toString()));
+				}								
+			}			
+			return ___columns;
 
-						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
-							___object = ___objects.getJSONObject(___i);
-							___value = ___object.get(___feature);
+		}
 
-							((StringColumn) ___columns.get(___j)).append(((org.json.JSONArray) ___value).toString());
-						}
-						++___j;
+		@SuppressWarnings("unchecked")
+		private static Object __executeDistributedQuery(char typeQuery, Object query, ArrayList <MongoCollection <Document>> sourceList) {
+			switch(typeQuery) {			
+				case 'S':
+					List <Table> __table = new ArrayList <> ();
+					for(MongoCollection <Document> source: sourceList) {
+						List <Table> __tmp = __generateTableFromNoSQLQuery(source.find((BsonDocument) query).cursor());
+						if(__table.size() == 0)
+							__table = __tmp;
+						else {
+							for(int i = 0; i < __table.size(); i++) {
+								boolean flag = false;
 
-					} else {
+								for(int j = 0; j < __tmp.size(); j++) {										
+									if(__table.get(i).columnCount() == __tmp.get(j).columnCount()) {
+										// Se le colonne hanno lo stesso numero
+										Iterator <String> iterator = __table.get(i).columnNames().iterator();
+										Iterator <String> iteratorTmp = __tmp.get(j).columnNames().iterator();
 
-						if(___value instanceof Integer) {
-							IntColumn ___columnToAdd = IntColumn.create(___nameColumn + ___feature);
-							___columnToAdd.append((Integer) ___value);
-							___columns.add(___columnToAdd);
-						} else				
-							___columns.add(StringColumn.create(___nameColumn +___feature, "" + ___value));
+										// Controllo se effettivamente le colonne sono uguali
+										int countIterator = 0;
+										int countColumns = __table.get(i).columnCount();
 
-						for(int ___i = 1; ___i < ___objects.length(); ++___i) {					
-							___object = ___objects.getJSONObject(___i);
-							___value = ___object.get(___feature);
+										while(iterator.hasNext()) {											
+											if(iterator.next().equals(iteratorTmp.next()))
+													countIterator++;
+											else break;											
+										}
 
-							if(___value instanceof Integer)
-								((IntColumn) ___columns.get(___j)).append((Integer) ___value);
-							else
-								((StringColumn) ___columns.get(___j)).append("" + ___value);					
-						}
-						++___j;
-
-					}								
-				}			
-				return ___columns;
-
-			}
-
-			@SuppressWarnings("unchecked")
-			private static Object __executeDistributedQuery(char typeQuery, Object query, ArrayList <MongoCollection <Document>> sourceList) {
-				switch(typeQuery) {			
-					case 'S':
-						List <Table> __table = new ArrayList <> ();
-						for(MongoCollection <Document> source: sourceList) {
-							List <Table> __tmp = __generateTableFromNoSQLQuery(source.find((BsonDocument) query).cursor());
-							if(__table.size() == 0)
-								__table = __tmp;
-							else {
-								for(int i = 0; i < __table.size(); i++) {
-									boolean flag = false;
-
-									for(int j = 0; j < __tmp.size(); j++) {										
-										if(__table.get(i).columnCount() == __tmp.get(j).columnCount()) {
-											// Se le colonne hanno lo stesso numero
-											Iterator <String> iterator = __table.get(i).columnNames().iterator();
-											Iterator <String> iteratorTmp = __tmp.get(j).columnNames().iterator();
-
-											// Controllo se effettivamente le colonne sono uguali
-											int countIterator = 0;
-											int countColumns = __table.get(i).columnCount();
-
-											while(iterator.hasNext()) {											
-												if(iterator.next().equals(iteratorTmp.next()))
-														countIterator++;
-												else break;											
-											}
-
-											// Controllo sui contatori
-											if(countIterator == countColumns) { // Se sono uguali, le colonne sono uguali
-												__table.get(i).append(__tmp.get(j));
-												__tmp.remove(j); // Rimuovo la tabella appena aggiunta+
-												flag = true;
-												break;
-											} else { // Se non sono uguali, le colonne sono diverse, allora continuiamo
-												continue;
-											}																				
-										}																	
-									}
-
-									if(flag) // Se sono uscito dal for precedente per un interruzione, vuol dire che una tabella presenta nella lista di ritorno è stata incrementata
-										continue;								
+										// Controllo sui contatori
+										if(countIterator == countColumns) { // Se sono uguali, le colonne sono uguali
+											__table.get(i).append(__tmp.get(j));
+											__tmp.remove(j); // Rimuovo la tabella appena aggiunta+
+											flag = true;
+											break;
+										} else { // Se non sono uguali, le colonne sono diverse, allora continuiamo
+											continue;
+										}																				
+									}																	
 								}
 
-							__table.addAll(__tmp); // Tutte le tabelle che non possono essere incrementate, vengono aggiunte come nuove tabelle
-
+								if(flag) // Se sono uscito dal for precedente per un interruzione, vuol dire che una tabella presenta nella lista di ritorno è stata incrementata
+									continue;								
 							}
+
+						__table.addAll(__tmp); // Tutte le tabelle che non possono essere incrementate, vengono aggiunte come nuove tabelle
+
 						}
-						return __table;
+					}
+					return __table;
 
-					case 'D':
-						long countDelete = 0;
-						for(MongoCollection <Document> source: sourceList)
-							countDelete += source.deleteMany((BsonDocument) query).getDeletedCount();
-						return countDelete;
+				case 'D':
+					long countDelete = 0;
+					for(MongoCollection <Document> source: sourceList)
+						countDelete += source.deleteMany((BsonDocument) query).getDeletedCount();
+					return countDelete;
 
-					case 'I':
-						for(MongoCollection <Document> source: sourceList)
-							source.insertMany((List <Document>) query);
-						return null;
+				case 'I':
+					for(MongoCollection <Document> source: sourceList)
+						source.insertMany((List <Document>) query);
+					return null;
 
-					case 'U':
-						for(MongoCollection <Document> source: sourceList)
-							source.updateMany(((ArrayList<BsonDocument>) query).get(0), ((ArrayList<BsonDocument>) query).get(1));
-						return null;
+				case 'U':
+					for(MongoCollection <Document> source: sourceList)
+						source.updateMany(((ArrayList<BsonDocument>) query).get(0), ((ArrayList<BsonDocument>) query).get(1));
+					return null;
 
-					case 'R':
-						for(MongoCollection <Document> source: sourceList)
-							source.replaceOne(((ArrayList<BsonDocument>) query).get(0), Document.parse((((ArrayList<BsonDocument>) query).get(1).toJson())));
-						return null;
+				case 'R':
+					for(MongoCollection <Document> source: sourceList)
+						source.replaceOne(((ArrayList<BsonDocument>) query).get(0), Document.parse((((ArrayList<BsonDocument>) query).get(1).toJson())));
+					return null;
 
-					default: 
-						return null;
-				}
+				default: 
+					return null;
+			}
 
-			}	
-	
+		}	
+
 	}
 	'''
 	return s
@@ -2761,12 +2775,17 @@ class FLYGenerator extends AbstractGenerator {
 			filter[(right as DeclarationObject).features.get(0).value_s.equals("smp")].get(0)
 			var local = local_env.name
 			var env = (element.environment.right as DeclarationObject).features.get(0).value_s
+			var env_name = element.environment.name
+			if (env.equals("vm-cluster")){
+				env = ((element.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(0).value_s
+				env_name = (element.environment as VariableDeclaration).environment.get(0).name
+			}
 			switch env {
 				case "aws":
 					return '''
-						__sqs_«element.environment.name».createQueue(new CreateQueueRequest("termination-«element.target.name»-"+__id_execution));
+						__sqs_«env_name».createQueue(new CreateQueueRequest("termination-«element.target.name»-"+__id_execution));
 						LinkedTransferQueue<String> __termination_«element.target.name»_ch_«func_counter»  = new LinkedTransferQueue<String>();
-						final String __termination_«element.target.name»_url_«func_counter» = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
+						final String __termination_«element.target.name»_url_«func_counter» = __sqs_«env_name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
 						for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
 							__thread_pool_«local».submit(new Callable<Object>() {
 								@Override
@@ -2774,10 +2793,10 @@ class FLYGenerator extends AbstractGenerator {
 									while(__wait_on_termination_«element.target.name»_«func_counter») {
 										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url_«func_counter»).
 												withWaitTimeSeconds(1).withMaxNumberOfMessages(10);
-										ReceiveMessageResult __res = __sqs_«element.environment.name».receiveMessage(__recmsg);
+										ReceiveMessageResult __res = __sqs_«env_name».receiveMessage(__recmsg);
 										for(Message msg : __res.getMessages()) { 
 											__termination_«element.target.name»_ch_«func_counter».put(msg.getBody());
-											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url_«func_counter», msg.getReceiptHandle());
+											__sqs_«env_name».deleteMessage(__termination_«element.target.name»_url_«func_counter», msg.getReceiptHandle());
 										}
 									}
 									return null;
@@ -2787,9 +2806,9 @@ class FLYGenerator extends AbstractGenerator {
 						'''
 				case "aws-debug":
 					return '''
-						__sqs_«element.environment.name».createQueue(new CreateQueueRequest("termination-«element.target.name»-"+__id_execution));
+						__sqs_«env_name».createQueue(new CreateQueueRequest("termination-«element.target.name»-"+__id_execution));
 						LinkedTransferQueue<String> __termination_«element.target.name»_ch  = new LinkedTransferQueue<String>();
-						final String __termination_«element.target.name»_url_«func_counter» = __sqs_«element.environment.name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
+						final String __termination_«element.target.name»_url_«func_counter» = __sqs_«env_name».getQueueUrl("termination-«element.target.name»-"+__id_execution).getQueueUrl();
 						for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
 							__thread_pool_«local».submit(new Callable<Object>() {
 								@Override
@@ -2797,10 +2816,10 @@ class FLYGenerator extends AbstractGenerator {
 									while(__wait_on_termination_«element.target.name»_«func_counter») {
 										ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__termination_«element.target.name»_url_«func_counter»).
 												withWaitTimeSeconds(1).withMaxNumberOfMessages(10);
-										ReceiveMessageResult __res = __sqs_«element.environment.name».receiveMessage(__recmsg);
+										ReceiveMessageResult __res = __sqs_«env_name».receiveMessage(__recmsg);
 										for(Message msg : __res.getMessages()) { 
 											__termination_«element.target.name»_ch_«func_counter».put(msg.getBody());
-											__sqs_«element.environment.name».deleteMessage(__termination_«element.target.name»_url_«func_counter», msg.getReceiptHandle());
+											__sqs_«env_name».deleteMessage(__termination_«element.target.name»_url_«func_counter», msg.getReceiptHandle());
 										}
 									}
 									return null;
@@ -2810,13 +2829,13 @@ class FLYGenerator extends AbstractGenerator {
 						'''
 				case "azure":
 					return '''
-						«element.environment.name».createQueue("termination-«element.target.name»-"+__id_execution);
+						«env_name».createQueue("termination-«element.target.name»-"+__id_execution);
 						LinkedTransferQueue<String> __termination_«element.target.name»_ch_«func_counter»  = new LinkedTransferQueue<String>();
 						__thread_pool_«local».submit(new Callable<Object>() {
 							@Override
 							public Object call() throws Exception {
 								while(__wait_on_termination_«element.target.name»_«func_counter») {
-									List<String> __recMsgs = «element.environment.name».peeksFromQueue("termination-«element.target.name»-"+__id_execution,10);
+									List<String> __recMsgs = «env_name».peeksFromQueue("termination-«element.target.name»-"+__id_execution,10);
 									for(String msg : __recMsgs) { 
 										__termination_«element.target.name»_ch_«func_counter».put(msg);
 									}
@@ -3512,30 +3531,22 @@ class FLYGenerator extends AbstractGenerator {
 	def generateVMClusterFlyFunctionCall(FlyFunctionCall call, String scope) {
 		
 		var s = '''
+			«call.environment.environment.get(0).name» = new AWSClient(creds, "«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»", __termination_«call.target.name»_url_«func_termination_counter»);
+			
 			«call.environment.environment.get(0).name».zipAndUploadCurrentProject();
 					
 			int vmsCreatedCount_«func_ID» = «call.environment.environment.get(0).name».launchVMCluster(vmTypeSize_«id_execution», purchasingOption_«id_execution», persistent_«id_execution», vmCount_«id_execution»);
 			
 			if ( vmsCreatedCount_«func_ID» != 0) {
 				System.out.print("\n\u27A4 Waiting for virtual machines boot script to complete...");
-				«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-					while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != vmsCreatedCount_«func_ID»);
-				«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-					while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-												.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != vmsCreatedCount_«func_ID»);
-				«ENDIF»
+				while ( __termination_«call.target.name»_ch_«func_termination_counter».size() != vmsCreatedCount_«func_ID»);
 				System.out.println("Done");
 			}
 			if(vmsCreatedCount_«func_ID» != vmCount_«id_execution»){
 				if ( vmsCreatedCount_«func_ID» > 0) «call.environment.environment.get(0).name».downloadFLYProjectonVMCluster();
 				
 				System.out.print("\n\u27A4 Waiting for download project on VM CLuster to complete...");
-				«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-					while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount_«id_execution»+vmsCreatedCount_«func_ID»));
-				«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-					while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-												.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount_«id_execution»+vmsCreatedCount_«func_ID»));
-				«ENDIF»
+				while (__termination_«call.target.name»_ch_«func_termination_counter».size() != (vmCount_«id_execution»+vmsCreatedCount_«func_ID»));
 			}
 			System.out.println("Done");
 			
@@ -3544,24 +3555,14 @@ class FLYGenerator extends AbstractGenerator {
 			
 			System.out.print("\n\u27A4 Waiting for building project on VM CLuster to complete...");
 			if(vmsCreatedCount_«func_ID» != vmCount_«id_execution»){
-				«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-					while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != ( (vmCount_«id_execution»*2)+vmsCreatedCount_«func_ID»));
-				«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-					while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-												.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != ( (vmCount_«id_execution»*2)+vmsCreatedCount_«func_ID»));
-				«ENDIF»
+				while ( __termination_«call.target.name»_ch_«func_termination_counter».size() != ( (vmCount_«id_execution»*2)+vmsCreatedCount_«func_ID»));
 			} else {
-				«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-					while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount_«id_execution»*2));
-				«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-					while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-												.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount_«id_execution»*2));
-				«ENDIF»
+				while (__termination_«call.target.name»_ch_«func_termination_counter».size() != (vmCount_«id_execution»*2));
 			}
 			System.out.println("Done");
 			'''
 			
-			//Workload splitting on VM Cluster
+			//Workload input splitting on VM Cluster
 			if ((call.input as FunctionInput).is_for_index) { // 'for 'keyword 
 	
 				if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
@@ -3700,41 +3701,19 @@ class FLYGenerator extends AbstractGenerator {
 					'''
 			}
 			
-			//Start waiting for results and execute FLY func on VM Cluster
 			s += '''
-				«FOR el: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-					«IF !(el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")»
-						«generateChannelWaitingResultsForVMCluster(el)»
-					«ENDIF»
-				«ENDFOR»
-				
 				«call.environment.environment.get(0).name».executeFLYonVMCluster(portionInputs_«func_ID»,
-																	numberOfFunctions_«func_ID»,
-																	__id_execution);
+												numberOfFunctions_«func_ID»,
+												__id_execution);
 				
 				System.out.print("\n\u27A4 Waiting for FLY execution to complete...");
 				if(vmsCreatedCount_«func_ID» != vmCount_«id_execution»){
-					«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-						while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != ( (vmCount_«id_execution»*3)+vmsCreatedCount_«func_ID»));
-					«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-						while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-													.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != ( (vmCount_«id_execution»*3)+vmsCreatedCount_«func_ID»));
-					«ENDIF»
+					while (__termination_«call.target.name»_ch_«func_termination_counter».size() != ( (vmCount_«id_execution»*3)+vmsCreatedCount_«func_ID»));
 				} else {
-					«IF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-						while («call.environment.environment.get(0).name».getQueueLength(terminationQueue) != (vmCount_«id_execution»*3));
-					«ELSEIF ((call.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("aws")»
-						while ( Long.parseLong(__sqs_«call.environment.environment.get(0).name».getQueueAttributes(new GetQueueAttributesRequest().withQueueUrl(terminationQueue)
-													.withAttributeNames(QueueAttributeName.ApproximateNumberOfMessages.toString())).getAttributes().get("ApproximateNumberOfMessages")) != (vmCount_«id_execution»*3));
-					«ENDIF»
+					while (__termination_«call.target.name»_ch_«func_termination_counter».size() != (vmCount_«id_execution»*3));
 				}
-				«FOR el: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-					«IF !(el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")»
-						__wait_on_«el.name» = false;
-						System.out.println("Done");
-					«ENDIF»
-				«ENDFOR»
+				__wait_on_termination_«call.target.name»_«func_termination_counter++»=false;
+				System.out.println("Done");
 				
 				//Check for execution errors
 				String err_«func_ID» = «call.environment.environment.get(0).name».checkForExecutionErrors(numberOfFunctions_«func_ID»);
@@ -3744,76 +3723,18 @@ class FLYGenerator extends AbstractGenerator {
 					System.out.println(err_«func_ID»);
 				}else {
 					//No execution errors
+					//Manage the callback
 					«IF call.isIs_thenall»
 						«call.thenall.name»();
 					«ENDIF»
 				}
 				
-				«FOR el: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-					«IF !(el.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("smp")»
-						//Delete results queue
-						__sqs_«el.environment.get(0).name».deleteQueue(new DeleteQueueRequest(__sqs_«el.environment.get(0).name».getQueueUrl("«el.name»-"+__id_execution).getQueueUrl()));
-						//Delete documents with commands
-						«el.environment.get(0).name».cleanResources();
-					«ENDIF»
-				«ENDFOR»
+				//Delete documents with commands
+				«call.environment.environment.get(0).name».cleanResources();
 			'''
 
 		func_ID++
 		return s
-	}
-	
-		
-	def generateChannelWaitingResultsForVMCluster(VariableDeclaration dec) {
-		var env = ((dec.environment.get(0).right as DeclarationObject).features.get(0)).value_s
-		var env_name = dec.environment.get(0).name
-		var local_env = res.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-			filter[(right as DeclarationObject).features.get(0).value_s.equals("smp")].get(0)
-		var local = local_env.name
-		switch env {
-			case "aws":
-			return '''
-				__sqs_«env_name».createQueue(new CreateQueueRequest("«dec.name»-"+__id_execution));
-				
-				for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
-					__thread_pool_«local».submit(new Callable<Object>() {
-						@Override
-						public Object call() throws Exception {
-							while(__wait_on_«dec.name») {
-								ReceiveMessageRequest __recmsg = new ReceiveMessageRequest(__sqs_«env_name».getQueueUrl("«dec.name»-"+__id_execution).getQueueUrl()).
-										withWaitTimeSeconds(1).withMaxNumberOfMessages(10);
-								ReceiveMessageResult __res = __sqs_«env_name».receiveMessage(__recmsg);
-								for(Message msg : __res.getMessages()) { 
-									«dec.name».put(msg.getBody());
-									__sqs_«env_name».deleteMessage(__sqs_«env_name».getQueueUrl("«dec.name»-"+__id_execution).getQueueUrl(), msg.getReceiptHandle());
-								}
-							}
-							return null;
-						}
-					});
-				}
-			'''
-		case "azure":
-			return '''
-				«env_name».setupQueue("«dec.name»-"+__id_execution);
-
-				for(int __i=0;__i< (Integer)__fly_environment.get("«local»").get("nthread");__i++){ 
-					__thread_pool_«local».submit(new Callable<Object>() {
-						@Override
-						public Object call() throws Exception {
-							while(__wait_on_«dec.name») {
-								List<String> __recMsgs = «env_name».peeksFromQueue("«dec.name»-"+__id_execution,32);
-								for(String msg : __recMsgs) { 
-									«dec.name».put(msg);
-								}
-							}
-							return null;
-						}
-					});
-				}
-			'''
-			}	
 	}
 	
 
