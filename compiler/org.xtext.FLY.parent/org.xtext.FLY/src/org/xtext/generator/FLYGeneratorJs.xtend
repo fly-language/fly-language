@@ -212,6 +212,10 @@ class FLYGeneratorJs extends AbstractGenerator {
 			var __nosql = require("mongodb");
 			var __fs = require("fs")
 			var __parse = require("csv-parse");
+			
+			var __submatrixIndex = -1;
+			var __submatrixDisplacement = -1;
+			
 			«FOR req: exps.expressions.filter(RequireExpression)»
 			
 			«ENDFOR»
@@ -260,9 +264,10 @@ class FLYGeneratorJs extends AbstractGenerator {
 							}
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
 							__«(exp as VariableDeclaration).name»_matrix = event.data[0]
-							__«(exp as VariableDeclaration).name»_rows = event.data[0].rows;
-							__«(exp as VariableDeclaration).name»_cols = event.data[0].cols;
-							submatrixIndex = event.data[0].submatrixIndex;
+							__«(exp as VariableDeclaration).name»_rows = event.data[0].submatrixRows;
+							__«(exp as VariableDeclaration).name»_cols = event.data[0].submatrixCols;
+							__submatrixIndex = event.data[0].submatrixIndex;
+							__displacement = event.data[0].submatrixDisplacement;
 							__«(exp as VariableDeclaration).name»_values = event.data[0].values
 							__index = 0
 							«(exp as VariableDeclaration).name» = [];
@@ -504,24 +509,12 @@ class FLYGeneratorJs extends AbstractGenerator {
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSEIF  exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
-					var matrixType = ""
-					if ( typeof «generateJsArithmeticExpression(exp.expression,scope)»[0][0] == "number"){
-					
-					        // check if it is integer
-					        if (Number.isInteger(«generateJsArithmeticExpression(exp.expression,scope)»[0][0])) {
-					            matrixType = "int"
-					        }else {
-					            matrixType = "double"
-					        }
-					}
 					__params = {
 						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
-												'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
-												'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
-												«IF !root.parameters.empty»
-													'submatrixIndex': submatrixIndex,
-												«ENDIF»
-												'matrixType': matrixType}),
+												'submatrixRows': «generateJsArithmeticExpression(exp.expression,scope)».length,
+												'submatrixCols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
+												'submatrixIndex':  __submatrixIndex,
+												'submatrixDisplacement': __displacement}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSE»

@@ -287,6 +287,9 @@ class FLYGeneratorPython extends AbstractGenerator {
 			import azure.functions as func
 			from azure.storage.queue import QueueServiceClient
 			«ENDIF»
+			
+			__submatrixIndex = -1;
+			__submatrixDisplacement = -1;
 						
 			«FOR exp : resourceInput.allContents.toIterable.filter(ConstantDeclaration)»
 				«generatePyExpression(exp,name,local)»
@@ -323,9 +326,10 @@ class FLYGeneratorPython extends AbstractGenerator {
 							
 					«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
 						__«(exp as VariableDeclaration).name»_matrix = data[0]
-						__«(exp as VariableDeclaration).name»_rows = data[0]['rows']
-						__«(exp as VariableDeclaration).name»_cols = data[0]['cols']
-						submatrixIndex = data[0]['submatrixIndex']
+						__«(exp as VariableDeclaration).name»_rows = data[0]['submatrixRows']
+						__«(exp as VariableDeclaration).name»_cols = data[0]['submatrixCols']
+						__submatrixIndex = data[0]['submatrixIndex']
+						__submatrixDisplacement = data[0]['submatrixDisplacement']
 						__«(exp as VariableDeclaration).name»_values = data[0]['values']
 						__index = 0
 						«(exp as VariableDeclaration).name» = [[0 for x in range(__«(exp as VariableDeclaration).name»_cols)] for y in range(__«(exp as VariableDeclaration).name»_rows)]
@@ -371,12 +375,10 @@ class FLYGeneratorPython extends AbstractGenerator {
 				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
 					«exp.target.name».send_message(
 						MessageBody=json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
-						'rows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
-						'cols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
-						«IF !root.parameters.empty»
-							'submatrixIndex': submatrixIndex,
-						«ENDIF»
-						'matrixType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0][0].__class__.__name__})
+						'submatrixRows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+						'submatrixCols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
+						'submatrixIndex': __submatrixIndex,
+						'submatrixDisplacement': __submatrixDisplacement})
 					)
 				«ELSE»
 					«exp.target.name».send_message(
