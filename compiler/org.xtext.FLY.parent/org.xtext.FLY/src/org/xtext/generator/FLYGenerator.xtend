@@ -2272,7 +2272,7 @@ class FLYGenerator extends AbstractGenerator {
 									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
 									JSONObject jsonObject_«func_ID» = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
 																		
-									int arr_length_«func_ID» = jsonObject_«func_ID».getInt("length");
+									int arr_length_«func_ID» = jsonObject_«func_ID».getInt("subarrayLength");
 									int subarrayIndex_«func_ID» = 0;
 									try{
 										//subarrayIndex is present only if the function invokes with arrayPortion param
@@ -3027,7 +3027,7 @@ class FLYGenerator extends AbstractGenerator {
 				if (expression.type.equals("Array")) {
 					//called only in case of Array on channel on AWS
 					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+
-												" , \"length\":"+«generateArithmeticExpression(expression.target,scope)».length+ 
+												" , \"subarrayLength\":"+«generateArithmeticExpression(expression.target,scope)».length+ 
 												",  \"subarrayIndex\":"+subIndex_«id_execution»+
 												" , \"subarrayDisplacement\":"+displ_«id_execution»+"}").toString())'''
 				}
@@ -3265,7 +3265,7 @@ class FLYGenerator extends AbstractGenerator {
 						return s
 					} else if (expression.feature.equals("setType")){
 						return  '''System.out.println("The function setType is ineffective: the array has already a type");'''
-					} else if (expression.feature.equals("getDisplacement") || expression.feature.equals("getSubarrayIndex")){
+					} else if (expression.feature.equals("getPortionDisplacement") || expression.feature.equals("getPortionIndex")){
 						//The array is not a portion, so it returns -1
 						return "-1;"
 					} else {
@@ -3304,7 +3304,7 @@ class FLYGenerator extends AbstractGenerator {
 						return s
 					} else if (expression.feature.equals("setType")){
 						return  '''System.out.println("The function setType is ineffective: the matrix has already a type");'''
-					} else if (expression.feature.equals("getDisplacement") || expression.feature.equals("getSubmatrixIndex")){
+					} else if (expression.feature.equals("getPortionDisplacement") || expression.feature.equals("getPortionIndex")){
 						//The matrix is not a portion, so it returns -1
 						return "-1;"
 					} else {
@@ -3375,9 +3375,9 @@ class FLYGenerator extends AbstractGenerator {
 							s += '''System.out.println("The function setType is ineffective: the array has already a type");'''
 						}
 						return s
-					} else if (expression.feature.equals("getDisplacement")){
+					} else if (expression.feature.equals("getPortionDisplacement")){
 						return "displ_"+id_execution+";"
-					} else if (expression.feature.equals("getSubarrayIndex")){
+					} else if (expression.feature.equals("getPortionIndex")){
 						return "subIndex_"+id_execution+";"
 					} else {
 						var s = expression.target.name + "." + expression.feature + "("
@@ -3453,9 +3453,9 @@ class FLYGenerator extends AbstractGenerator {
 							s += '''System.out.println("The function setType is ineffective: the matrix has already a type");'''
 						}
 						return s
-					} else if (expression.feature.equals("getDisplacement")){
+					} else if (expression.feature.equals("getPortionDisplacement")){
 						return "displ_"+id_execution+";"
-					} else if (expression.feature.equals("getSubmatrixIndex")){
+					} else if (expression.feature.equals("getPortionIndex")){
 						return "subIndex_"+id_execution+";"
 					} else if (expression.feature.equals("deepToString")){ //matrix to string
 						var s = "Arrays." + expression.feature + "(" + expression.target.name + ")"
@@ -4498,31 +4498,31 @@ class FLYGenerator extends AbstractGenerator {
 						
 						if ( __arr_length_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __arr_length_«func_ID»;
 						
-						int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
-						int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
-						int offset = 0;
+						int[] dimPortions_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+						int[] displ_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+						int offset_«func_ID» = 0;
 						
 						for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-							dimPortions[__i] = (__arr_length_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+							dimPortions_«func_ID»[__i] = (__arr_length_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
 								((__i < (__arr_length_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
-							displ[__i] = offset;								
-							offset += dimPortions[__i];
+							displ_«func_ID»[__i] = offset_«func_ID»;								
+							offset_«func_ID» += dimPortions_«func_ID»[__i];
 
 							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-							«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
-								String[] arrayPortion = Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ[__i], displ[__i]+dimPortions[__i]);
-								String myArrayPortionString = "[";
-								for (int x=0; x < arrayPortion.length; x++) {
-									if ( x < arrayPortion.length-1){
-										myArrayPortionString += "\""+arrayPortion[x]+"\",";
-									}else{
-										myArrayPortionString += "\""+arrayPortion[x]+"\"]";
-									 }
-								}
-							«ELSE»
-								String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ[__i], displ[__i]+dimPortions[__i] ));
-							«ENDIF»
-							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"length\":"+dimPortions[__i]+",\"subarrayIndex\":"+__i+",\"myArrayPortion\":"+myArrayPortionString+"}");
+						«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+							String[] arrayPortion = Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[__i], displ_«func_ID»[__i]+dimPortions_«func_ID»[__i]);
+							String myArrayPortionString = "[";
+							for (int x=0; x < arrayPortion.length; x++) {
+								if ( x < arrayPortion.length-1){
+									myArrayPortionString += "\""+arrayPortion[x]+"\",";
+								}else{
+									myArrayPortionString += "\""+arrayPortion[x]+"\"]";
+								 }
+							}
+						«ELSE»
+							String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[__i], displ_«func_ID»[__i]+dimPortions_«func_ID»[__i] ));
+						«ENDIF»
+							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"subarrayLength\":"+dimPortions_«func_ID»[__i]+",\"subarrayIndex\":"+__i+",\"subarrayDisplacement\":"+displ_«func_ID»[__i]+",\"values\":"+myArrayPortionString+"}");						
 						}
 						for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 							final int __i_f = __i;
@@ -4604,29 +4604,41 @@ class FLYGenerator extends AbstractGenerator {
 							ret+='''
 								int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«call.environment.name»").get("nthread");
 								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-								int __current_col_«(call.input.f_index as VariableLiteral).variable.name» = 0;
+								
+								int __current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = 0;
+								
 								int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
 								int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
 								
 								if ( __cols_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __cols_«func_ID»;
 								
+								int[] dimPortions_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+								int[] displ_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+								int offset_«func_ID» = 0;
+								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-									int __n_cols =  __cols_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
-									if(__cols_«func_ID»%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __cols_«func_ID»%__num_proc_«call.target.name»_«func_ID» ){
-										__n_cols++;
-									}
+									dimPortions_«func_ID»[__i] = (__cols_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+																			((__i < (__cols_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
+									displ_«func_ID»[__i] = offset_«func_ID»;
+									offset_«func_ID» += dimPortions_«func_ID»[__i];
+
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows_«func_ID»+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"values\":[");
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+__rows_«func_ID»+",\"submatrixCols\":"+dimPortions_«func_ID»[__i]+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ_«func_ID»[__i]+",\"values\":[");							
+																		
 									for(int __j = 0; __j<__rows_«func_ID»;__j++){
-										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»+__n_cols;__z++){
-											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+dimPortions_«func_ID»[__i];__z++){
+											«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+												__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":\""+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"\"},");
+											«ELSE»
+												__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+											«ENDIF»
 										}
 										if(__j == __rows_«func_ID»-1) {
 											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
 											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("]}");
 										}
 									}
-									__current_col_«(call.input.f_index as VariableLiteral).variable.name»+=__n_cols;
+									__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+=dimPortions_«func_ID»[__i];
 								}
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 										final int __i_f = __i;
@@ -5676,7 +5688,7 @@ class FLYGenerator extends AbstractGenerator {
 				} else if (exp.feature.equals("split")) { 
 					return "String[]"
 				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length") || exp.feature.equals("rowCount") || exp.feature.equals("colCount")
-					|| exp.feature.equals("getDisplacement") || exp.feature.equals("getSubmatrixIndex") || exp.feature.equals("getSubarrayIndex")) {
+					|| exp.feature.equals("getPortionDisplacement") || exp.feature.equals("getPortionIndex")) {
 					return "Integer"
 				} else if (exp.feature.equals("concat") || exp.feature.equals("substring")||
 					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase") || exp.feature.equals("deepToString")) {

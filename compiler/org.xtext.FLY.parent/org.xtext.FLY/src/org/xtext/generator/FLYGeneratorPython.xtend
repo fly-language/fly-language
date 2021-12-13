@@ -288,8 +288,8 @@ class FLYGeneratorPython extends AbstractGenerator {
 			from azure.storage.queue import QueueServiceClient
 			«ENDIF»
 			
-			__submatrixIndex = -1;
-			__submatrixDisplacement = -1;
+			__portionIndex = -1;
+			__portionDisplacement = -1;
 						
 			«FOR exp : resourceInput.allContents.toIterable.filter(ConstantDeclaration)»
 				«generatePyExpression(exp,name,local)»
@@ -316,9 +316,10 @@ class FLYGeneratorPython extends AbstractGenerator {
 						«(exp as VariableDeclaration).name» = pd.read_json(json.dumps(data))
 						«(exp as VariableDeclaration).name» = «(exp as VariableDeclaration).name»[__columns]
 					«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-						__«(exp as VariableDeclaration).name»_length = data[0]['length']
-						subarrayIndex = data[0]['subarrayIndex']
-						__«(exp as VariableDeclaration).name»_values = data[0]['myArrayPortion']
+						__«(exp as VariableDeclaration).name»_length = data[0]['subarrayLength']
+						__portionIndex = data[0]['subarrayIndex']
+						__portionDisplacement = data[0]['subarrayDisplacement']
+						__«(exp as VariableDeclaration).name»_values = data[0]['values']
 						
 						«(exp as VariableDeclaration).name» = [0 for x in range(__«(exp as VariableDeclaration).name»_length)]
 						for __i in range(__«(exp as VariableDeclaration).name»_length):
@@ -328,8 +329,8 @@ class FLYGeneratorPython extends AbstractGenerator {
 						__«(exp as VariableDeclaration).name»_matrix = data[0]
 						__«(exp as VariableDeclaration).name»_rows = data[0]['submatrixRows']
 						__«(exp as VariableDeclaration).name»_cols = data[0]['submatrixCols']
-						__submatrixIndex = data[0]['submatrixIndex']
-						__submatrixDisplacement = data[0]['submatrixDisplacement']
+						__portionIndex = data[0]['submatrixIndex']
+						__portionDisplacement = data[0]['submatrixDisplacement']
 						__«(exp as VariableDeclaration).name»_values = data[0]['values']
 						__index = 0
 						«(exp as VariableDeclaration).name» = [[0 for x in range(__«(exp as VariableDeclaration).name»_cols)] for y in range(__«(exp as VariableDeclaration).name»_rows)]
@@ -366,19 +367,17 @@ class FLYGeneratorPython extends AbstractGenerator {
 				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
 					«exp.target.name».send_message(
 						MessageBody=json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
-						'length': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
-						«IF !root.parameters.empty»
-							'subarrayIndex': subarrayIndex,
-						«ENDIF»
-						'arrayType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0].__class__.__name__})
+						'subarrayLength': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+						'subarrayIndex': __portionIndex,
+						'subarrayDisplacement': __portionDisplacement})
 					)
 				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
 					«exp.target.name».send_message(
 						MessageBody=json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
 						'submatrixRows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
 						'submatrixCols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
-						'submatrixIndex': __submatrixIndex,
-						'submatrixDisplacement': __submatrixDisplacement})
+						'submatrixIndex': __portionIndex,
+						'submatrixDisplacement': __portionDisplacement})
 					)
 				«ELSE»
 					«exp.target.name».send_message(
@@ -1529,7 +1528,10 @@ class FLYGeneratorPython extends AbstractGenerator {
 			if (exp.target.typeobject.equals("var")) {
 				if (exp.feature.equals("split")) {
 					return "String[]"
-				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length")) {
+				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length")
+					|| exp.feature.equals("getPortionIndex") || exp.feature.equals("getPortionDisplacement")
+					|| exp.feature.equals("rowCount") || exp.feature.equals("colCount")
+				) {
 					return "Integer"
 				} else if (exp.feature.equals("concat") || exp.feature.equals("substring") ||
 					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase")) {
@@ -1667,6 +1669,120 @@ class FLYGeneratorPython extends AbstractGenerator {
 					return generatePyArithmeticExpression(expression, scope, local)
 				}
 			}
+		}else if (expression.target.right instanceof ArrayInit ){
+			if(((expression.target.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
+					((expression.target.right as ArrayInit).values.get(0) instanceof StringLiteral) ||
+					((expression.target.right as ArrayInit).values.get(0) instanceof FloatLiteral)
+				){ //array mono-dimensional	
+					if(expression.feature.equals("length")){
+						var s = "len("+expression.target.name + ")"
+						return s
+					} else if (expression.feature.equals("deepToString")){
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''print('The function setType is ineffective: the array has already a type')'''
+					} else if (expression.feature.equals("getPortionIndex") || expression.feature.equals("getPortionIndex")){
+						//The array is not a portion, so it returns -1
+						return "-1;"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generatePyArithmeticExpression(exp, scope, local)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
+				} else if ((expression.target.right as ArrayInit).values.get(0) instanceof ArrayValue){ //matrix 2d
+					if(expression.feature.equals("rowCount")){
+						var s = "len("+expression.target.name + ")"
+						return s
+					} else if (expression.feature.equals("colCount")){
+						var s = "len("+expression.target.name + "[0])"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''print('The function setType is ineffective: the matrix has already a type')'''
+					} else if (expression.feature.equals("getPortionDisplacement") || expression.feature.equals("getPortionIndex")){
+						//The matrix is not a portion, so it returns -1
+						return "-1;"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generatePyArithmeticExpression(exp, scope, local)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}	
+				}
+		} else if ( (expression.target instanceof VariableDeclaration &&
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Array"))) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Array")))
+					) { //Array variable					
+					
+					if(expression.feature.equals("length")){
+						var s = "len("+expression.target.name + ")"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //array to string
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''print('The function setType is ineffective: the array in py does not need a type')'''
+					} else if (expression.feature.equals("getPortionDisplacement")){
+						return "__portionDisplacement"
+					} else if (expression.feature.equals("getPortionIndex")){
+						return "__portionIndex"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generatePyArithmeticExpression(exp, scope, local)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
+		} else if ( (expression.target instanceof VariableDeclaration &&
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Matrix"))) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Matrix")))
+					) { //Matrix variable
+					if(expression.feature.equals("rowCount")){
+						var s = "len("+expression.target.name + ")"
+						return s
+					} else if (expression.feature.equals("colCount")){
+						var s = "len("+expression.target.name + "[0])"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''print('The function setType is ineffective: the matrix in nodejs does not need a type')'''
+					} else if (expression.feature.equals("getPortionDisplacement")){
+						return "__portionDisplacement"
+					} else if (expression.feature.equals("getPortionIndex")){
+						return "__portionIndex"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generatePyArithmeticExpression(exp, scope, local)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
 		}else{
 			return generatePyArithmeticExpression(expression, scope, local)
 		}

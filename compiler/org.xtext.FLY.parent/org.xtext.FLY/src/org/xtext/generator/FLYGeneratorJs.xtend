@@ -184,17 +184,16 @@ class FLYGeneratorJs extends AbstractGenerator {
 			var __AWS = require("aws-sdk");
 			
 				«IF env.equals("aws")»
-			var __sqs = new __AWS.SQS();
-			var __rds = new __AWS.RDS();
-			
+					var __sqs = new __AWS.SQS();
+					var __rds = new __AWS.RDS();
 				«ELSE»
-			__AWS.config.update({
-			    accessKeyId: "dummy",
-			    secretAccessKey: "dummy",
-			    region:"us-east-1",
-			    logger: process.stdout
-			})
-			var __sqs = new __AWS.SQS({endpoint: "http://192.168.0.1:4576"});
+				__AWS.config.update({
+				    accessKeyId: "dummy",
+				    secretAccessKey: "dummy",
+				    region:"us-east-1",
+				    logger: process.stdout
+				})
+				var __sqs = new __AWS.SQS({endpoint: "http://192.168.0.1:4576"});
 				«ENDIF»
 			let __params;
 			let __data;
@@ -213,8 +212,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 			var __fs = require("fs")
 			var __parse = require("csv-parse");
 			
-			var __submatrixIndex = -1;
-			var __submatrixDisplacement = -1;
+			var __portionIndex = -1;
+			var __portionDisplacement = -1;
 			
 			«FOR req: exps.expressions.filter(RequireExpression)»
 			
@@ -254,22 +253,23 @@ class FLYGeneratorJs extends AbstractGenerator {
 							var __data_«(exp as VariableDeclaration).name» = await new __dataframe(event.data);
 							var «(exp as VariableDeclaration).name» = __data_«(exp as VariableDeclaration).name».toArray();
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-							var __«(exp as VariableDeclaration).name»_length = event.data[0].length;
-							var subarrayIndex = event.data[0].subarrayIndex;
-							var __«(exp as VariableDeclaration).name»_values = event.data[0].myArrayPortion;
+							var __«(exp as VariableDeclaration).name»_length = event.data[0].subarrayLength;
+							__portionIndex = event.data[0].subarrayIndex;
+							__portionDisplacement = event.data[0].subarrayDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = event.data[0].values;
 							
 							«(exp as VariableDeclaration).name» = [];
 							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_length; __i++) {
 								«(exp as VariableDeclaration).name»[__i] = __«(exp as VariableDeclaration).name»_values[__i];
 							}
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
-							__«(exp as VariableDeclaration).name»_matrix = event.data[0]
-							__«(exp as VariableDeclaration).name»_rows = event.data[0].submatrixRows;
-							__«(exp as VariableDeclaration).name»_cols = event.data[0].submatrixCols;
-							__submatrixIndex = event.data[0].submatrixIndex;
-							__displacement = event.data[0].submatrixDisplacement;
-							__«(exp as VariableDeclaration).name»_values = event.data[0].values
-							__index = 0
+							var __«(exp as VariableDeclaration).name»_matrix = event.data[0]
+							var __«(exp as VariableDeclaration).name»_rows = event.data[0].submatrixRows;
+							var __«(exp as VariableDeclaration).name»_cols = event.data[0].submatrixCols;
+							__portionIndex = event.data[0].submatrixIndex;
+							__portionDisplacement = event.data[0].submatrixDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = event.data[0].values
+							var __index = 0
 							«(exp as VariableDeclaration).name» = [];
 							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_rows; __i++) {
 								«(exp as VariableDeclaration).name»[__i] = [];
@@ -489,23 +489,11 @@ class FLYGeneratorJs extends AbstractGenerator {
 				__data = await __sqs.getQueueUrl({ QueueName: "«exp.target.name»-'${id}'"}).promise();
 				
 				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
-					var arrayType = ""
-					if ( typeof «generateJsArithmeticExpression(exp.expression,scope)»[0] == "number"){
-					
-					        // check if it is integer
-					        if (Number.isInteger(«generateJsArithmeticExpression(exp.expression,scope)»[0])) {
-					            arrayType = "int"
-					        }else {
-					            arrayType = "double"
-					        }
-					}
 					__params = {
 						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
-												'length': «generateJsArithmeticExpression(exp.expression,scope)».length,
-												«IF !root.parameters.empty»
-													'subarrayIndex': subarrayIndex,
-												«ENDIF»
-												'arrayType': arrayType}),
+												'subarrayLength': «generateJsArithmeticExpression(exp.expression,scope)».length,
+												'subarrayIndex': __portionIndex,
+												'subarrayDisplacement': __portionDisplacement}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSEIF  exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
@@ -513,8 +501,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
 												'submatrixRows': «generateJsArithmeticExpression(exp.expression,scope)».length,
 												'submatrixCols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
-												'submatrixIndex':  __submatrixIndex,
-												'submatrixDisplacement': __displacement}),
+												'submatrixIndex':  __portionIndex,
+												'submatrixDisplacement': __portionDisplacement}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSE»
@@ -537,6 +525,8 @@ class FLYGeneratorJs extends AbstractGenerator {
 				«ENDIF»
 			«ENDIF»
 			'''
+		} else if (exp instanceof ChannelReceive) {
+			//TODO handle receive things on channel
 		} else if (exp instanceof VariableDeclaration) {
 			if (exp.typeobject.equals("var")) {
 				if (exp.right instanceof NameObjectDef) {
@@ -1918,6 +1908,11 @@ class FLYGeneratorJs extends AbstractGenerator {
 					} else if (expression.feature.equals("deepToString")){
 						var s = expression.target.name
 						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''console.log("The function setType is ineffective: the array in nodejs does not need a type")'''
+					} else if (expression.feature.equals("getPortionIndex") || expression.feature.equals("getPortionIndex")){
+						//The array is not a portion, so it returns -1
+						return "-1;"
 					} else {
 						var s = expression.target.name + "." + expression.feature + "("
 						for (exp : expression.expressions) {
@@ -1929,7 +1924,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 						s += ")"
 						return s
 					}
-
 				} else if ((expression.target.right as ArrayInit).values.get(0) instanceof ArrayValue){ //matrix 2d
 					if(expression.feature.equals("rowCount")){ //num of rows
 						var s = expression.target.name + ".length"
@@ -1940,6 +1934,11 @@ class FLYGeneratorJs extends AbstractGenerator {
 					} else if (expression.feature.equals("deepToString")){ //matrix to string
 						var s = expression.target.name
 						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''console.log("The function setType is ineffective: the matrix in nodejs does not need a type")'''
+					} else if (expression.feature.equals("getPortionDisplacement") || expression.feature.equals("getPortionIndex")){
+						//The matrix is not a portion, so it returns -1
+						return "-1;"
 					} else {
 						var s = expression.target.name + "." + expression.feature + "("
 						for (exp : expression.expressions) {
@@ -1965,6 +1964,12 @@ class FLYGeneratorJs extends AbstractGenerator {
 					} else if (expression.feature.equals("deepToString")){ //array to string
 						var s = expression.target.name
 						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''console.log("The function setType is ineffective: the array in nodejs does not need a type")'''
+					} else if (expression.feature.equals("getPortionDisplacement")){
+						return "__portionDisplacement"
+					} else if (expression.feature.equals("getPortionIndex")){
+						return "__portionIndex"
 					} else {
 						var s = expression.target.name + "." + expression.feature + "("
 						for (exp : expression.expressions) {
@@ -1990,6 +1995,12 @@ class FLYGeneratorJs extends AbstractGenerator {
 					} else if (expression.feature.equals("deepToString")){ //matrix to string
 						var s = expression.target.name
 						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''console.log("The function setType is ineffective: the matrix in nodejs does not need a type")'''					
+					} else if (expression.feature.equals("getPortionDisplacement")){
+						return "__portionDisplacement"
+					} else if (expression.feature.equals("getPortionIndex")){
+						return "__portionIndex"
 					} else {
 						var s = expression.target.name + "." + expression.feature + "("
 						for (exp : expression.expressions) {
