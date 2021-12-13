@@ -727,35 +727,23 @@ class FLYGenerator extends AbstractGenerator {
 						'''
 					}
 			} else { // f_index is a range
-				if (call.isIsAsync && call.isIs_thenall) {
-					s += '''
-						final int __numThread = «((call.input as FunctionInput).f_index as RangeLiteral ).value2 - ((call.input as FunctionInput).f_index as RangeLiteral ).value1» - 1;
-					'''
-				}
-				
-				var value1 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l1) != null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l1.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value1  ;
-				var value2 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l2) != null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l2.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value2  ;
-
 				s += '''
-					int dimPortion = Integer.parseInt(args[0]); //dimPortion
-					// args[1], start index -- in range literal could be not used
+					JSONObject jsonObject = new JSONObject(myObjectInput);
+					jsonObject = new JSONObject(jsonObject.getJSONArray("data").get(0).toString());
 					
-					for(int _i=«value1»;_i<dimPortion;_i++){
+					int portionLength = jsonObject.getInt("portionLength");
+					int portionIndex = jsonObject.getInt("portionIndex");
+					
+					for(int _i=0;_i<portionLength;_i++){
 						final int __i = _i;
 						Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 							
 							public Object call() throws Exception {
-								// TODO Auto-generated method stub
 								
 								Object __ret = «call.target.name»(«IF call.target.parameters.length==1»__i«ENDIF»);
 								«IF call.isIs_then»
 									«call.then.name»();
-								«ENDIF»
-								«IF call.isIsAsync && call.isIs_thenall»
-									if(__count.getAndIncrement()==__numThread){
-										__asyncTermination.put("Termination");
-									}
-								«ENDIF»   						
+								«ENDIF»					
 								return __ret;
 							}
 						});
@@ -2349,7 +2337,7 @@ class FLYGenerator extends AbstractGenerator {
 						 				«dec.name» = (Integer[]) «dec.name»;
 									} else if(«dec.name».getClass().getSimpleName().equals("Double[]")){
 						 				«dec.name» = (Double[]) «dec.name»;
-									} else if(x.getClass().getSimpleName().equals("String[]")){
+									} else if(«dec.name».getClass().getSimpleName().equals("String[]")){
 						 				«dec.name» = (String[]) «dec.name»;
 									}
 								'''
@@ -2361,7 +2349,7 @@ class FLYGenerator extends AbstractGenerator {
 						 				«dec.name» = (Integer[][]) «dec.name»;
 									} else if(«dec.name».getClass().getSimpleName().equals("Double[][]")){
 						 				«dec.name» = (Double[][]) «dec.name»;
-									} else if(x.getClass().getSimpleName().equals("String[][]")){
+									} else if(«dec.name».getClass().getSimpleName().equals("String[][]")){
 						 				«dec.name» = (String[][]) «dec.name»;
 									}
 								'''
@@ -3778,17 +3766,33 @@ class FLYGenerator extends AbstractGenerator {
 							'''
 						}
 				} else { // f_index is a range
-					//TO FIX
+					var value1 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l1) !== null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l1.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value1  ;
 					var value2 = if ((((call.input as FunctionInput).f_index as RangeLiteral ).value_l2) !== null) ((call.input as FunctionInput).f_index as RangeLiteral ).value_l2.name  else ((call.input as FunctionInput).f_index as RangeLiteral ).value2  ;
 					s += '''
 						int vmCount_«func_ID» = vmCount_«id_execution»;
-						for(int i=0; i<vmCount_«func_ID»;i++){
-						            dimPortions_«func_ID»[i] = («value2» / vmCount_«func_ID») +
-						                            ((i < («value2» % vmCount_«func_ID»)) ? 1 : 0);
-						            displ_«func_ID»[i] = offset_«func_ID»;
-						            offset_«func_ID» += dimPortions_«func_ID»[i];
+						int numberOfFunctions_«func_ID» = «value2» - «value1»;
+						
+						ArrayList<StringBuilder> __temp_«func_ID» = new ArrayList<StringBuilder>();
+						ArrayList<String> portionInputs_«func_ID» = new ArrayList<String>();
+						
+						if ( vmCount_«func_ID» > numberOfFunctions_«func_ID») vmCount_«func_ID» = numberOfFunctions_«func_ID»;
+																					
+						int[] dimPortions_«func_ID» = new int[vmCount_«func_ID»]; 
+						int[] displ_«func_ID» = new int[vmCount_«func_ID»]; 
+						int offset_«func_ID» = 0;
+														
+						for(int __i=0; __i<vmCount_«func_ID»;__i++){
+							dimPortions_«func_ID»[__i] = (numberOfFunctions_«func_ID» / vmCount_«func_ID») +
+								((__i < (numberOfFunctions_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
+							displ_«func_ID»[__i] = offset_«func_ID»;
+							offset_«func_ID» += dimPortions_«func_ID»[__i];
+							
+							__temp_«func_ID».add(__i,new StringBuilder());
+							__temp_«func_ID».get(__i).append("{\"portionLength\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+"}");							
+							portionInputs_«func_ID».add(__generateString(__temp_«func_ID».get(__i).toString(),«func_ID»));
 						}
-						int numberOfFunctions_«func_ID» = «value2»;
+						numberOfFunctions_«func_ID» = vmCount_«func_ID»;
+						int notUsedVMs_«func_ID» = vmCount_«id_execution» - vmCount_«func_ID»;
 					'''
 				}
 			} else { // no 'in' keyword
@@ -4104,21 +4108,22 @@ class FLYGenerator extends AbstractGenerator {
 								
 								if ( __arr_length_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __arr_length_«func_ID»;
 								
-								int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
-								int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
-								int offset = 0;
+								int[] dimPortions_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+								int[] displ_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+								int offset_«func_ID» = 0;
 								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-									dimPortions[__i] = (__arr_length_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+									dimPortions_«func_ID»[__i] = (__arr_length_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
 										((__i < (__arr_length_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
-									displ[__i] = offset;								
-									offset += dimPortions[__i];
+									displ_«func_ID»[__i] = offset_«func_ID»;								
+									offset_«func_ID» += dimPortions_«func_ID»[__i];
+									
 									final int i = __i;
 									Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 												
 										public Object call() throws Exception {
 											
-											Object __ret = «call.target.name»(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ[i], displ[i]+dimPortions[i] ));
+											Object __ret = «call.target.name»(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[i], displ_«func_ID»[i]+dimPortions_«func_ID»[i] ));
 											«IF call.isIs_then»
 												«call.then.name»();
 											«ENDIF»					
