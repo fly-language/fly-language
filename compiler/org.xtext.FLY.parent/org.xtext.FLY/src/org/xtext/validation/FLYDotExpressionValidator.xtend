@@ -18,7 +18,6 @@ import org.xtext.typing.FlyTypeProvider
 class FLYDotExpressionValidator extends AbstractFLYValidator {
 	
 	@Inject extension FlyMethodProvider
-	@Inject extension FlyTypeProvider
 
 	
 	@Check

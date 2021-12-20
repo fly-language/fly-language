@@ -3,19 +3,19 @@
  */
 package org.xtext.validation
 
-import com.google.inject.Inject
 import org.eclipse.xtext.validation.Check
 import org.xtext.fLY.DeclarationFeature
 import org.xtext.fLY.FLYPackage
+import com.google.inject.Inject
 
 class FLYValidator extends AbstractFLYValidator {
 	
-	@Inject extension FLYDotExpressionValidator
-	@Inject extension FLYDomainObjectValidator
+//	@Inject extension FLYDotExpressionValidator
+//	@Inject extension FLYDomainObjectValidator
 //	@Inject extension FLYOperationValidator
-	@Inject extension FLYFlowControlValidator
+//	@Inject extension FLYFlowControlValidator
 //	@Inject extension FLYObjectValidator
-	@Inject extension FLYFunctionValidator
+//	@Inject extension FLYFunctionValidator
 	
 	@Check
 	def checkFilePath(DeclarationFeature feature) {
