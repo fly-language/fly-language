@@ -1,0 +1,32 @@
+var local = [type="smp", nthread=4]
+
+//var cloud = [type="aws", user="default", access_id_key = "", secret_access_key="", region="eu-west-2", language="python3.8", thread=10, memory=256, time_=300]
+var cloud = [type="azure", clientID="", tenantID="", secret_key="", subscriptionID="", region="West Europe", language="python", threads=100, seconds=300]
+
+//var cloud = [type="aws-debug",user="dummy_fly_debug",access_key="dummy",secret_key="dummy",region="us-east-1",language="nodejs12.x",nthread=10,memory=128,seconds=300]
+
+var ch = [type="channel"] on cloud
+
+func pi(){	
+   var r = [type="random"]
+   var x = r.nextDouble()
+   var y = r.nextDouble()
+   var msg = 0
+ 
+   if((x * x)+(y * y) < 1.0){msg = 1}
+   ch!msg on cloud
+}
+
+
+func estimation(){
+   var sum = 0
+   var crt = 0
+   for i in [0:100] {
+       sum += ch? as Integer
+       crt += 1
+}
+   println "pi estimation: " + (sum*4.0) / crt
+}
+
+
+fly pi in [0:100] on cloud thenall estimation  
