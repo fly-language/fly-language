@@ -473,12 +473,7 @@ class FLYGenerator extends AbstractGenerator {
 			int numThreadsAvailable = Runtime.getRuntime().availableProcessors();
 			
 			String myObjectInput = args[0];
-			String[] mySplits = myObjectInput.split("-");
-			int mySplitsCount = Integer.parseInt(mySplits[0]);
 			__id_execution = Long.parseLong(args[1]);
-			
-			int numThreadsToUse = numThreadsAvailable;
-			if (mySplitsCount < numThreadsAvailable) numThreadsToUse = mySplitsCount;
 				
 			«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
 				«initialiseConstant(element,"main")»
@@ -563,63 +558,16 @@ class FLYGenerator extends AbstractGenerator {
 					//TO DO
 			} else if(call.input.f_index instanceof VariableLiteral &&
 				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Directory")){
-					//TO DO if needed
+					//TO DO
 			} else if(call.input.f_index instanceof VariableLiteral &&
 				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")){
 					s+='''
-						JSONObject jsonObject = new JSONObject(myObjectInput);
-						jsonObject = new JSONObject(jsonObject.getJSONArray("data").get(0).toString());
-						
-						int subarrayLength = jsonObject.getInt("subarrayLength");
-						int subarrayIndex = jsonObject.getInt("subarrayIndex");
-						int subarrayDisplacement = jsonObject.getInt("subarrayDisplacement");
-						
-						subIndex_«id_execution» = subarrayIndex;
-						displ_«id_execution» = subarrayDisplacement;
-						
-						int numThreadsToUse = numThreadsAvailable;
-						if (subarrayLength < numThreadsAvailable) numThreadsToUse = subarrayLength;
-						
-						//Get the type of element inside the array and generate the subarray
-						«var arrayType = typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-							.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1)»
-						«arrayType»[] subArray = new «arrayType»[subarrayLength];
-						
-						//Re-construct my array portion
-						JSONArray values = jsonObject.getJSONArray("values");
-						
-						int indexValues = 0;	
-						for (int i = 0; i < subarrayLength; i++) {
-							«IF arrayType.equals("Integer")»
-								subArray[i] = values.getInt(indexValues++);
-							«ELSEIF arrayType.equals("Double")»
-								subArray[i] = values.getDouble(indexValues++);
-							«ELSE»
-								subArray[i] = values.getString(indexValues++);
-							«ENDIF»
-						}
-						
-						for(int __i=0;__i< numThreadsToUse;__i++){
-							final int i = __i;
-							Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-										
-								public Object call() throws Exception {
-									
-									Object __ret = «call.target.name»(subArray);
-									«IF call.isIs_then»
-										«call.then.name»();
-									«ENDIF»					
-									return __ret;
-								}
-							});
-							«call.target.name»_«func_ID»_return.add(_f);
-						}
-						
-					'''
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
-					if(call.input.split.equals("row")){ 
-						s+='''
+							String[] mySplits = myObjectInput.split("@@@@@");
+							int mySplitsCount = Integer.parseInt(mySplits[0]);
+							
+							int numThreadsToUse = numThreadsAvailable;
+							if (mySplitsCount < numThreadsAvailable) numThreadsToUse = mySplitsCount;
+							
 							for(int __i=0;__i< numThreadsToUse;__i++){
 								final int i = __i;
 								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
@@ -636,52 +584,22 @@ class FLYGenerator extends AbstractGenerator {
 								«call.target.name»_«func_ID»_return.add(_f);
 							}
 						'''
-					}else if(call.input.split.equals("col")){
-						s+='''
-							JSONObject jsonObject = new JSONObject(myObjectInput);
-							jsonObject = new JSONObject(jsonObject.getJSONArray("data").get(0).toString());
-							
-							int submatrixRows = jsonObject.getInt("submatrixRows");
-							int submatrixCols = jsonObject.getInt("submatrixCols");
-							int submatrixIndex = jsonObject.getInt("submatrixIndex");
-							int submatrixDisplacement = jsonObject.getInt("submatrixDisplacement");
-							
-							subIndex_«id_execution» = submatrixIndex;
-							displ_«id_execution» = submatrixDisplacement;
+			} else if(call.input.f_index instanceof VariableLiteral &&
+				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
+					s+='''
+							String[] mySplits = myObjectInput.split("@@@@@");
+							int mySplitsCount = Integer.parseInt(mySplits[0]);
 							
 							int numThreadsToUse = numThreadsAvailable;
-							if (submatrixCols < numThreadsAvailable) numThreadsToUse = submatrixCols;
-							
-							//Get the type of element inside the matrix and generate the submatrix
-							«var matrixType = typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-								.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-								typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-								)»
-							«matrixType»[][] subMatrix = new «matrixType»[submatrixRows][submatrixCols];
-							
-							//Re-construct my matrix portion
-							JSONArray values = jsonObject.getJSONArray("values");
-							
-							int indexValues = 0;	
-							for (int i = 0; i < submatrixRows; i++) {
-								for(int j = 0; j < submatrixCols; j++){
-									«IF matrixType.equals("Integer")»
-										subMatrix[i][j] = new JSONObject(values.get(indexValues++).toString()).getInt("value");
-									«ELSEIF matrixType.equals("Double")»
-										subMatrix[i][j] = new JSONObject(values.get(indexValues++).toString()).getDouble("value");
-									«ELSE»
-										subMatrix[i][j] = new JSONObject(values.get(indexValues++).toString()).getString("value");
-									«ENDIF»
-								}
-							}
-							
+							if (mySplitsCount < numThreadsAvailable) numThreadsToUse = mySplitsCount;
+										
 							for(int __i=0;__i< numThreadsToUse;__i++){
 								final int i = __i;
 								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 											
 									public Object call() throws Exception {
 										
-										Object __ret = «call.target.name»(subMatrix);
+										Object __ret = «call.target.name»(mySplits[i+1]);
 										«IF call.isIs_then»
 											«call.then.name»();
 										«ENDIF»					
@@ -691,7 +609,6 @@ class FLYGenerator extends AbstractGenerator {
 								«call.target.name»_«func_ID»_return.add(_f);
 							}
 						'''
-					}
 			} else { // f_index is a range
 				s += '''
 					JSONObject jsonObject = new JSONObject(myObjectInput);
@@ -2227,22 +2144,8 @@ class FLYGenerator extends AbstractGenerator {
 									JSONObject __jsonObject = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
 																		
 									int __arr_length = __jsonObject.getInt("subarrayLength");
-									int __subarrayIndex = 0;
-									try{
-										//subarrayIndex is present only if the function invokes with arrayPortion param
-										__subarrayIndex = __jsonObject.getInt("subarrayIndex");
-									}catch(NullPointerException e){
-										//no subarrayIndex needed
-										__subarrayIndex = -1;
-									}
-									int __subarrayDisplacement = 0;
-									try{
-										//subarrayDisplacement is present only if the function invokes with arrayPortion param
-										__subarrayDisplacement = __jsonObject.getInt("subarrayDisplacement");
-									}catch(NullPointerException e){
-										//no subarrayDisplacement needed
-										__subarrayDisplacement = -1;
-									}
+									int __portionIndex = __jsonObject.getInt("subarrayIndex");
+									int __portionDisplacement = __jsonObject.getInt("subarrayDisplacement");
 																		
 									//extract values from matrix json string
 									String __valuesJson = __jsonObject.get("values").toString();
@@ -2257,22 +2160,8 @@ class FLYGenerator extends AbstractGenerator {
 									
 									int __n_rows = __jsonObject.getInt("submatrixRows");
 									int __n_cols = __jsonObject.getInt("submatrixCols");
-									int __submatrixIndex = 0;
-									try{
-										//submatrixIndex is present only if the function invokes with matrixPortion param
-										__submatrixIndex = __jsonObject.getInt("submatrixIndex");
-									}catch(NullPointerException e){
-										//no submatrixIndex needed
-										__submatrixIndex = -1;
-									}
-									int __submatrixDisplacement = 0;
-									try{
-										//submatrixDisplacement is present only if the function invokes with arrayPortion param
-										__submatrixDisplacement = __jsonObject.getInt("submatrixDisplacement");
-									}catch(NullPointerException e){
-										//no submatrixDisplacement needed
-										__submatrixDisplacement = -1;
-									}
+									int __portionIndex = __jsonObject.getInt("submatrixIndex");
+									int __portionDisplacement = __jsonObject.getInt("submatrixDisplacement");
 																				        
 									//extract values from matrix json string
 									String __valuesJson = __jsonObject.get("values").toString();
@@ -2974,16 +2863,16 @@ class FLYGenerator extends AbstractGenerator {
 					//called only in case of Array on channel on AWS
 					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+
 												" , \"subarrayLength\":"+«generateArithmeticExpression(expression.target,scope)».length+ 
-												",  \"subarrayIndex\":"+__subarrayIndex+
-												" , \"subarrayDisplacement\":"+__subarrayDisplacement+"}").toString())'''
+												",  \"subarrayIndex\":"+__portionIndex+
+												" , \"subarrayDisplacement\":"+__portionDisplacement+"}").toString())'''
 				}
 				if (expression.type.equals("Matrix")) {
 					//called only in case of Array on channel on AWS
 					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+
 												" , \"submatrixRows\":"+«generateArithmeticExpression(expression.target,scope)».length+
 												" , \"submatrixCols\":"+«generateArithmeticExpression(expression.target,scope)»[0].length+
-												" , \"submatrixIndex\":"+__submatrixIndex+
-												" , \"submatrixDisplacement\":"+__submatrixDisplacement+"}").toString())'''
+												" , \"submatrixIndex\":"+__portionIndex+
+												" , \"submatrixDisplacement\":"+__portionDisplacement+"}").toString())'''
 				}
 			} else { // parsing
 				if (expression.type.equals("Integer")) {
@@ -3322,9 +3211,9 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						return s
 					} else if (expression.feature.equals("getPortionDisplacement")){
-						return "__subarrayDisplacement"
+						return "__portionDisplacement"
 					} else if (expression.feature.equals("getPortionIndex")){
-						return "__subarrayIndex"
+						return "__portionIndex"
 					} else {
 						var s = expression.target.name + "." + expression.feature + "("
 						for (exp : expression.expressions) {
@@ -3400,9 +3289,9 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						return s
 					} else if (expression.feature.equals("getPortionDisplacement")){
-						return "__submatrixDisplacement"
+						return "__portionDisplacement"
 					} else if (expression.feature.equals("getPortionIndex")){
-						return "__submatrixIndex"
+						return "__portionIndex"
 					} else if (expression.feature.equals("deepToString")){ //matrix to string
 						var s = "Arrays." + expression.feature + "(" + expression.target.name + ")"
 						if (t) {
@@ -3595,20 +3484,22 @@ class FLYGenerator extends AbstractGenerator {
 				} else if(call.input.f_index instanceof VariableLiteral &&
 					typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")){
 							s+='''
-								int vmCount_«func_ID» = vmCount_«id_execution»;
+								int splitCount_«func_ID» = vCPUsCount_«func_ID» * vmCount_«id_execution»;
+								int vmCountToUse_«func_ID» = vmCount_«id_execution»;
 								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 								ArrayList<String> portionInputs_«func_ID» = new ArrayList<String>();
 								int __arr_length_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
-														
-								if ( __arr_length_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __arr_length_«func_ID»;
 								
-								int[] dimPortions_«func_ID» = new int[vmCount_«func_ID»]; 
-								int[] displ_«func_ID» = new int[vmCount_«func_ID»]; 
+								if ( __arr_length_«func_ID» < splitCount_«func_ID») splitCount_«func_ID» = __arr_length_«func_ID»;
+								if ( splitCount_«func_ID» < vmCountToUse_«func_ID») vmCountToUse_«func_ID» = splitCount_«func_ID»;				
+								
+								int[] dimPortions_«func_ID» = new int[splitCount_«func_ID»]; 
+								int[] displ_«func_ID» = new int[splitCount_«func_ID»]; 
 								int offset_«func_ID» = 0;
 								
-								for(int __i=0;__i<vmCount_«func_ID»;__i++){
-									dimPortions_«func_ID»[__i] = (__arr_length_«func_ID» / vmCount_«func_ID») +
-										((__i < (__arr_length_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
+								for(int __i=0;__i<splitCount_«func_ID»;__i++){
+									dimPortions_«func_ID»[__i] = (__arr_length_«func_ID» / splitCount_«func_ID») +
+										((__i < (__arr_length_«func_ID» % splitCount_«func_ID»)) ? 1 : 0);
 									displ_«func_ID»[__i] = offset_«func_ID»;								
 									offset_«func_ID» += dimPortions_«func_ID»[__i];
 									
@@ -3630,8 +3521,8 @@ class FLYGenerator extends AbstractGenerator {
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"subarrayLength\":"+dimPortions_«func_ID»[__i]+",\"subarrayIndex\":"+__i+",\"subarrayDisplacement\":"+displ_«func_ID»[__i]+",\"values\":\""+myArrayPortionString+"\"}");							
 									portionInputs_«func_ID».add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));
 								}
-								int numberOfFunctions_«func_ID» = vmCount_«func_ID»;
-								int notUsedVMs_«func_ID» = vmCount_«id_execution» - vmCount_«func_ID»;
+								int numberOfFunctions_«func_ID» = splitCount_«func_ID»;
+								int notUsedVMs_«func_ID» = vmCount_«id_execution» - vmCountToUse_«func_ID»;
 							'''
 				} else if(call.input.f_index instanceof VariableLiteral &&
 					typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
@@ -3683,24 +3574,26 @@ class FLYGenerator extends AbstractGenerator {
 							'''
 						}else if (call.input.split.equals("col")){ 
 							s+='''
-								int vmCount_«func_ID» = vmCount_«id_execution»;
+								int splitCount_«func_ID» = vCPUsCount_«func_ID» * vmCount_«id_execution»;
+								int vmCountToUse_«func_ID» = vmCount_«id_execution»;
 								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 								ArrayList<String> portionInputs_«func_ID» = new ArrayList<String>();
-								
+
 								int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
 								int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
-								
+
 								int __current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = 0;
-								
-								if ( __cols_«func_ID» < vmCount_«func_ID») vmCount_«func_ID» = __cols_«func_ID»;
+
+								if ( __cols_«func_ID» < splitCount_«func_ID») splitCount_«func_ID» = __cols_«func_ID»;
+								if ( splitCount_«func_ID» < vmCountToUse_«func_ID») vmCountToUse_«func_ID» = splitCount_«func_ID»;
 															
-								int[] dimPortions_«func_ID» = new int[vmCount_«func_ID»]; 
-								int[] displ_«func_ID» = new int[vmCount_«func_ID»]; 
+								int[] dimPortions_«func_ID» = new int[splitCount_«func_ID»]; 
+								int[] displ_«func_ID» = new int[splitCount_«func_ID»]; 
 								int offset_«func_ID» = 0;
 																
-								for(int __i=0;__i<vmCount_«func_ID»;__i++){
-									dimPortions_«func_ID»[__i] = (__cols_«func_ID» / vmCount_«func_ID») +
-																			((__i < (__cols_«func_ID» % vmCount_«func_ID»)) ? 1 : 0);
+								for(int __i=0;__i<splitCount_«func_ID»;__i++){
+									dimPortions_«func_ID»[__i] = (__cols_«func_ID» / splitCount_«func_ID») +
+																			((__i < (__cols_«func_ID» % splitCount_«func_ID»)) ? 1 : 0);
 									displ_«func_ID»[__i] = offset_«func_ID»;
 									offset_«func_ID» += dimPortions_«func_ID»[__i];
 									
@@ -3723,8 +3616,8 @@ class FLYGenerator extends AbstractGenerator {
 									__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+=dimPortions_«func_ID»[__i];
 									portionInputs_«func_ID».add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));						
 								}
-								int numberOfFunctions_«func_ID» = vmCount_«func_ID»;
-								int notUsedVMs_«func_ID» = vmCount_«id_execution» - vmCount_«func_ID»;
+								int numberOfFunctions_«func_ID» = splitCount_«func_ID»;
+								int notUsedVMs_«func_ID» = vmCount_«id_execution» - vmCountToUse_«func_ID»;
 							'''
 						}
 				} else { // f_index is a range
@@ -5374,18 +5267,18 @@ class FLYGenerator extends AbstractGenerator {
 		var res = ""
 		if(paramType.contains("Matrix")){
 			res += '''
-				JSONObject jsonObject = new JSONObject(__«paramName»);
-				jsonObject = new JSONObject(jsonObject.getJSONArray("data").get(0).toString());
+				JSONObject __jsonObject = new JSONObject(__«paramName»);
+				__jsonObject = new JSONObject(__jsonObject.getJSONArray("data").get(0).toString());
 				
-				Integer __submatrixRows = jsonObject.getInt("submatrixRows");
-				Integer __submatrixCols = jsonObject.getInt("submatrixCols");
-				Integer __submatrixIndex = jsonObject.getInt("submatrixIndex");
-				Integer __submatrixDisplacement = jsonObject.getInt("submatrixDisplacement");
+				Integer __submatrixRows = __jsonObject.getInt("submatrixRows");
+				Integer __submatrixCols = __jsonObject.getInt("submatrixCols");
+				Integer __portionIndex = __jsonObject.getInt("submatrixIndex");
+				Integer __portionDisplacement = __jsonObject.getInt("submatrixDisplacement");
 
 				«paramMicroType»[][] «paramName» = new «paramMicroType»[__submatrixRows][__submatrixCols];
 				
 				//Re-construct my matrix portion
-				JSONArray __values = jsonObject.getJSONArray("values");
+				JSONArray __values = __jsonObject.getJSONArray("values");
 				
 				int __indexValues = 0;	
 				for (int i = 0; i < __submatrixRows; i++) {
@@ -5401,7 +5294,30 @@ class FLYGenerator extends AbstractGenerator {
 				}
 			'''
 		}else if (paramType.contains("Array")){
-		
+			res += '''
+				JSONObject __jsonObject = new JSONObject(__«paramName»);
+				__jsonObject = new JSONObject(__jsonObject.getJSONArray("data").get(0).toString());
+				
+				Integer __subarrayLength = __jsonObject.getInt("subarrayLength");
+				Integer __portionIndex = __jsonObject.getInt("subarrayIndex");
+				Integer __portionDisplacement = __jsonObject.getInt("subarrayDisplacement");
+				
+				«paramMicroType»[] «paramName» = new «paramMicroType»[__subarrayLength];
+				
+				//Re-construct my array portion
+				JSONArray __values = __jsonObject.getJSONArray("values");
+				
+				int __indexValues = 0;	
+				for (int i = 0; i < __subarrayLength; i++) {
+					«IF paramMicroType.equals("Integer")»
+						«paramName»[i] = __values.getInt(__indexValues++);
+					«ELSEIF paramMicroType.equals("Double")»
+						«paramName»[i] = __values.getDouble(__indexValues++);
+					«ELSE»
+						«paramName»[i] = __values.getString(__indexValues++);
+					«ENDIF»
+				}
+				'''
 		}
 	}
 		
@@ -5432,8 +5348,9 @@ class FLYGenerator extends AbstractGenerator {
 						}
 					} else if (typeobject.contains("Array")) {
 						typeSystem.get(name).put((param as VariableDeclaration).name, typeobject);
-						var tmp =  typeobject.split("_")
-						typeobject=tmp.get(1)+"[]"
+						/*var tmp =  typeobject.split("_")
+						typeobject=tmp.get(1)+"[]"*/
+						typeobject = "String"
 					} else if(typeobject.contains("Matrix")){
 						typeSystem.get(name).put((param as VariableDeclaration).name, typeobject);
 						/*var tmp =  typeobject.split("_")
@@ -5442,7 +5359,6 @@ class FLYGenerator extends AbstractGenerator {
 						}else if (tmp.length ==4){
 							typeobject=tmp.get(1)+"[][][]"
 						}*/
-						//TEST
 						typeobject = "String"
 					} else{
 						typeSystem.get(name).put((param as VariableDeclaration).name, typeobject);
@@ -5478,8 +5394,9 @@ class FLYGenerator extends AbstractGenerator {
 								}
 							}else if(typeobject.contains("Array")){
 								typeSystem.get(name).put((param as VariableDeclaration).name, typeobject);
-								var tmp =  typeobject.split("_")
-								typeobject=tmp.get(1)+"[]"
+								/*var tmp =  typeobject.split("_")
+								typeobject=tmp.get(1)+"[]"*/
+								typeobject = "String"
 							}else if(typeobject.contains("Matrix")){
 								typeSystem.get(name).put((param as VariableDeclaration).name, typeobject);
 								/*var tmp =  typeobject.split("_")
