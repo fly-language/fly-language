@@ -1,4 +1,4 @@
-package org.xtext.ide.server.codeAction
+package org.xtext.ide.server.codeActions
 
 import java.util.List
 import org.eclipse.emf.common.util.URI
@@ -18,7 +18,7 @@ import org.xtext.fLY.Fly
 class FlyCodeActionService implements ICodeActionService2 {
 
 		
-	override getCodeActions(Options options) {
+	override getCodeActions(ICodeActionService2.Options options) {
 		var root = options.resource.contents.head
 		if (root instanceof Fly)
 			createCodeActions(root, options.codeActionParams, options.document)

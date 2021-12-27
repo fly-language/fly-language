@@ -3,7 +3,193 @@
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="src" path="src-gen"/>
 	<classpathentry kind="src" path="xtend-gen"/>
-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8"/>
 	<classpathentry kind="con" path="org.eclipse.pde.core.requiredPlugins"/>
-	<classpathentry kind="output" path="target/classes"/>
+	<classpathentry kind="output" path="bin/default"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8/"/>
+	<classpathentry kind="src" path="/org.xtext.FLY"/>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.xbase.ide/2.24.0/f41a9f8f3906dc8c89378c64266b92835d89d0d1/org.eclipse.xtext.xbase.ide-2.24.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.xbase.ide/2.24.0/e219dbe77c0412b0374c91fecfb895d77502afb2/org.eclipse.xtext.xbase.ide-2.24.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.ide/2.24.0/fa60033e76cd484abe9b95c2a2a52399d9003551/org.eclipse.xtext.ide-2.24.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.ide/2.24.0/e60d069a2a1f025a758082b7b2916b81035d1ba6/org.eclipse.xtext.ide-2.24.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.xbase/2.24.0/cceaf0896d575161d5ee5994e0d948c8b1046d86/org.eclipse.xtext.xbase-2.24.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.xbase/2.24.0/5003b8b828d795c60b4807be554ea5f41b1fd2e6/org.eclipse.xtext.xbase-2.24.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.common.types/2.24.0/dbf22485398f4f00999d991978dc0e129311651e/org.eclipse.xtext.common.types-2.24.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.common.types/2.24.0/91121b194321453ef1a5b0e160e08dd256b923c7/org.eclipse.xtext.common.types-2.24.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext/2.24.0/42c75eb8fe5bcf4870de829f360f380ed1bc96f8/org.eclipse.xtext-2.24.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext/2.24.0/df79f414502ff5a10623c1851099a04b9cbeaccb/org.eclipse.xtext-2.24.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.util/2.24.0/36d95575d3f05649cf004fd0911c603441ec17d3/org.eclipse.xtext.util-2.24.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.util/2.24.0/448b41460173691117716989b7412736ea81681b/org.eclipse.xtext.util-2.24.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.lsp4j/org.eclipse.lsp4j/0.10.0/87f5e64bfd5a78fe8adc5f6624c4eaa7c4b8d10/org.eclipse.lsp4j-0.10.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.lsp4j/org.eclipse.lsp4j/0.10.0/271665493a1e35fb4c2d1dbabf19363c8ad27819/org.eclipse.lsp4j-0.10.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.lsp4j/org.eclipse.lsp4j.generator/0.10.0/3daefb2b4fd559c0f2e8bef337e19cc3e89ca1d7/org.eclipse.lsp4j.generator-0.10.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.lsp4j/org.eclipse.lsp4j.generator/0.10.0/ed2d6d876578b139aea24289422435148fef6b45/org.eclipse.lsp4j.generator-0.10.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtend/org.eclipse.xtend.lib/2.24.0/513f6f99494de19a4382103fd0209d62276331ff/org.eclipse.xtend.lib-2.24.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtend/org.eclipse.xtend.lib/2.24.0/a57306d5d523a4750fa09b2708062ea4972afea2/org.eclipse.xtend.lib-2.24.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtend/org.eclipse.xtend.lib.macro/2.24.0/8c07427d6bd1c1f5a03b0e1abac99c04b3d8cd6d/org.eclipse.xtend.lib.macro-2.24.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtend/org.eclipse.xtend.lib.macro/2.24.0/d8f5566ba67748ed9e91856e077ee99f00e86653/org.eclipse.xtend.lib.macro-2.24.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.xbase.lib/2.24.0/c8e564a6117ed3f6b342e54023e19771b4d34640/org.eclipse.xtext.xbase.lib-2.24.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.xbase.lib/2.24.0/53fbd66084b08850258e61c838cc1fb94335e718/org.eclipse.xtext.xbase.lib-2.24.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.guava/guava/27.1-jre/5dfa313690a903560bf27478345780a607bf1e9b/guava-27.1-jre-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.guava/guava/27.1-jre/e47b59c893079b87743cdcfb6f17ca95c08c592c/guava-27.1-jre.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.code.findbugs/jsr305/3.0.2/b19b5927c2c25b6c70f093767041e641ae0b1b35/jsr305-3.0.2-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.code.findbugs/jsr305/3.0.2/25ea2e8b0c338a877313bd4672d3fe056ea78f0d/jsr305-3.0.2.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.errorprone/error_prone_annotations/2.2.0/a8cd7823aa1dcd2fd6677c0c5988fdde9d1fb0a3/error_prone_annotations-2.2.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.errorprone/error_prone_annotations/2.2.0/88e3c593e9b3586e1c6177f89267da6fc6986f0c/error_prone_annotations-2.2.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.inject/guice/3.0/d117c4481f64955cb1862ed38cb568add2f5fe05/guice-3.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.inject/guice/3.0/9d84f15fe35e2c716a02979fb62f50a29f38aefa/guice-3.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/io.github.classgraph/classgraph/4.8.35/48899dc523d2a86b98e8750e42f15eebb8ae5515/classgraph-4.8.35-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/io.github.classgraph/classgraph/4.8.35/72b55cda8278ac9c2e3f2220ad58edaecac8f1b1/classgraph-4.8.35.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/log4j/log4j/1.2.17/677abe279b68c5e7490d6d50c6951376238d7d3e/log4j-1.2.17-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/log4j/log4j/1.2.17/5af35056b4d257e4b64b9e8069c0746e8b08629f/log4j-1.2.17.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.antlr/antlr-runtime/3.2/fc08e5ebbee6d8c4576b34743aec39989e9bf2c4/antlr-runtime-3.2-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.antlr/antlr-runtime/3.2/31c746001016c6226bd7356c9f87a6a084ce3715/antlr-runtime-3.2.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.emf/org.eclipse.emf.ecore.change/2.14.0/b3aaa6854d19586062ddc4230428594dbee20486/org.eclipse.emf.ecore.change-2.14.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.emf/org.eclipse.emf.ecore.change/2.14.0/919d756fed4322b1dac8ea37e54f186ee8a6d6bd/org.eclipse.emf.ecore.change-2.14.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.emf/org.eclipse.emf.ecore.xmi/2.16.0/c9f5f94713b197f738059530200f7e1f29f448f2/org.eclipse.emf.ecore.xmi-2.16.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.emf/org.eclipse.emf.ecore.xmi/2.16.0/d97e62119430239a787f779b399aa4b3fe11106e/org.eclipse.emf.ecore.xmi-2.16.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.emf/org.eclipse.emf.ecore/2.20.0/78f26dbc8e4b51c39f1d2e1b09b3275cd25c3de2/org.eclipse.emf.ecore-2.20.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.emf/org.eclipse.emf.ecore/2.20.0/a9f829c27bc1aa9f1f48b65d5356b7f7eff9866b/org.eclipse.emf.ecore-2.20.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.emf/org.eclipse.emf.common/2.17.0/925ef88d2f58c0f52ba499dcd0bf89300d997aa3/org.eclipse.emf.common-2.17.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.emf/org.eclipse.emf.common/2.17.0/2303a8766a11fd7eb51078866b317e9b7c4140d5/org.eclipse.emf.common-2.17.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.lsp4j/org.eclipse.lsp4j.jsonrpc/0.10.0/9a5c6d2f170b4cffce56c0b1c6281106cf9be9c6/org.eclipse.lsp4j.jsonrpc-0.10.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.lsp4j/org.eclipse.lsp4j.jsonrpc/0.10.0/42ca44a49315a490804a3ded67163123748c1f19/org.eclipse.lsp4j.jsonrpc-0.10.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.platform/org.eclipse.equinox.common/3.13.0/d0f71f67a4a519daf9e59b53352351501743c962/org.eclipse.equinox.common-3.13.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.platform/org.eclipse.equinox.common/3.13.0/cf3f518be2da5be643fc66d8a3cd96956741eeb0/org.eclipse.equinox.common-3.13.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.platform/org.eclipse.osgi/3.16.0/afbf9487e83759f55397f8a1fafee23ebc7446ee/org.eclipse.osgi-3.16.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.platform/org.eclipse.osgi/3.16.0/9449134155362d8dfbada5e89939ecf6d1092e64/org.eclipse.osgi-3.16.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-commons/9.0/e05dba04ed16700761c397b6d665de383478c929/asm-commons-9.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-commons/9.0/5a34a3a9ac44f362f35d1b27932380b0031a3334/asm-commons-9.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-analysis/9.0/69c8779db3098fab77bf462930e4edc16ef7f5f3/asm-analysis-9.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-analysis/9.0/4630afefbb43939c739445dde0af1a5729a0fb4e/asm-analysis-9.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-tree/9.0/ef07227f641685b6473fd0fbb4931afd6539df1a/asm-tree-9.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-tree/9.0/9df939f25c556b0c7efe00701d47e77a49837f24/asm-tree-9.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm/9.0/4ebd60354f49eaac2afe314ae2c7f21191807473/asm-9.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm/9.0/af582ff60bc567c42d931500c3fdc20e0141ddf9/asm-9.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/javax.inject/javax.inject/1/a00123f261762a7c5e0ec916a2c7c8298d29c400/javax.inject-1-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/javax.inject/javax.inject/1/6975da39a7040257bd51d21a231b76c915872d38/javax.inject-1.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/aopalliance/aopalliance/1.0/4a4b6d692e17846a9f3da036438a7ac491d3c814/aopalliance-1.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/aopalliance/aopalliance/1.0/235ba8b489512805ac13a8f9ea77a1ca5ebe3e8/aopalliance-1.0.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.code.gson/gson/2.8.2/b2da9f8444128651758719856de579eacff7f387/gson-2.8.2-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.code.gson/gson/2.8.2/3edcfe49d2c6053a70a2a47e4e1c2f94998a49cf/gson-2.8.2.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.guava/failureaccess/1.0.1/1d064e61aad6c51cc77f9b59dc2cccc78e792f5a/failureaccess-1.0.1-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.guava/failureaccess/1.0.1/1dcf1de382a0bf95a3d8b0849546c88bac1292c9/failureaccess-1.0.1.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/b421526c5f297295adef1c886e5246c39d4ac629/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.checkerframework/checker-qual/2.5.2/ebb8ebccd42218434674f3e1d9022c13df1c19f8/checker-qual-2.5.2-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.checkerframework/checker-qual/2.5.2/cea74543d5904a30861a61b4643a5f2bb372efc4/checker-qual-2.5.2.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.j2objc/j2objc-annotations/1.1/1efdf5b737b02f9b72ebdec4f72c37ec411302ff/j2objc-annotations-1.1-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/com.google.j2objc/j2objc-annotations/1.1/ed28ded51a8b1c6b112568def5f4b455e6809019/j2objc-annotations-1.1.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.codehaus.mojo/animal-sniffer-annotations/1.17/8fb5b5ad9c9723951b9fccaba5bb657fa6064868/animal-sniffer-annotations-1.17-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.codehaus.mojo/animal-sniffer-annotations/1.17/f97ce6decaea32b36101e37979f8b647f00681fb/animal-sniffer-annotations-1.17.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
 </classpath>
