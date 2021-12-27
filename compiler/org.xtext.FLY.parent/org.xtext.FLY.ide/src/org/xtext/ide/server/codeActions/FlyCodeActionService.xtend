@@ -1,4 +1,4 @@
-package org.xtext.ide.server
+package org.xtext.ide.server.codeAction
 
 import java.util.List
 import org.eclipse.emf.common.util.URI
