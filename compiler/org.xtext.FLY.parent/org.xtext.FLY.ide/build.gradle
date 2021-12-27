@@ -5,5 +5,15 @@ dependencies {
 }
 
 apply plugin: 'application'
+applicationName = 'fly-server'
 mainClassName = "org.eclipse.xtext.ide.server.ServerLauncher"
 
+task unzipServer(type: Copy, dependsOn: distZip) {
+	def zipFile = file("${buildDir}/distributions/fly-server-${version}.zip")
+	def outputDir = file("${buildDir}/../../../../vscode-extension/extension/server")
+
+	from zipTree(zipFile)
+	into outputDir
+}
+
+build.dependsOn unzipServer

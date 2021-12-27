@@ -10,7 +10,7 @@ let client: LanguageClient
 
 export function activate(context: vscode.ExtensionContext) {
     const executable = process.platform === 'win32' ? 'fly-server.bat' : 'fly-server';
-    const languageServerPath =  path.join('server', 'fly-language-server', 'bin', executable);
+    const languageServerPath =  path.join('server', 'fly-server-1.0.0-SNAPSHOT', 'bin', executable);
     const serverLauncher = context.asAbsolutePath(languageServerPath);
     const serverOptions: ServerOptions = {
         run: {
