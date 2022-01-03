@@ -287,9 +287,6 @@ class FLYGeneratorPython extends AbstractGenerator {
 			import azure.functions as func
 			from azure.storage.queue import QueueServiceClient
 			«ENDIF»
-			
-			__portionIndex = -1;
-			__portionDisplacement = -1;
 						
 			«FOR exp : resourceInput.allContents.toIterable.filter(ConstantDeclaration)»
 				«generatePyExpression(exp,name,local)»
@@ -316,10 +313,10 @@ class FLYGeneratorPython extends AbstractGenerator {
 						«(exp as VariableDeclaration).name» = pd.read_json(json.dumps(data))
 						«(exp as VariableDeclaration).name» = «(exp as VariableDeclaration).name»[__columns]
 					«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-						__«(exp as VariableDeclaration).name»_length = data[0]['subarrayLength']
-						__portionIndex = data[0]['subarrayIndex']
-						__portionDisplacement = data[0]['subarrayDisplacement']
-						__«(exp as VariableDeclaration).name»_values = data[0]['values']
+						__«(exp as VariableDeclaration).name»_length = data[0]['portionLength']
+						__portionIndex = data[0]['portionIndex']
+						__portionDisplacement = data[0]['portionDisplacement']
+						__«(exp as VariableDeclaration).name»_values = data[0]['portionValues']
 						
 						«(exp as VariableDeclaration).name» = [0 for x in range(__«(exp as VariableDeclaration).name»_length)]
 						for __i in range(__«(exp as VariableDeclaration).name»_length):
@@ -327,11 +324,11 @@ class FLYGeneratorPython extends AbstractGenerator {
 							
 					«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
 						__«(exp as VariableDeclaration).name»_matrix = data[0]
-						__«(exp as VariableDeclaration).name»_rows = data[0]['submatrixRows']
-						__«(exp as VariableDeclaration).name»_cols = data[0]['submatrixCols']
-						__portionIndex = data[0]['submatrixIndex']
-						__portionDisplacement = data[0]['submatrixDisplacement']
-						__«(exp as VariableDeclaration).name»_values = data[0]['values']
+						__«(exp as VariableDeclaration).name»_rows = data[0]['portionRows']
+						__«(exp as VariableDeclaration).name»_cols = data[0]['portionCols']
+						__portionIndex = data[0]['portionIndex']
+						__portionDisplacement = data[0]['portionDisplacement']
+						__«(exp as VariableDeclaration).name»_values = data[0]['portionValues']
 						__index = 0
 						«(exp as VariableDeclaration).name» = [[0 for x in range(__«(exp as VariableDeclaration).name»_cols)] for y in range(__«(exp as VariableDeclaration).name»_rows)]
 						for __i in range(__«(exp as VariableDeclaration).name»_rows):
@@ -366,18 +363,18 @@ class FLYGeneratorPython extends AbstractGenerator {
 			«ELSEIF (env.contains("aws"))»
 				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
 					«exp.target.name».send_message(
-						MessageBody=json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
-						'subarrayLength': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
-						'subarrayIndex': __portionIndex,
-						'subarrayDisplacement': __portionDisplacement})
+						MessageBody=json.dumps({'portionValues': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+						'portionLength': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+						'portionIndex': __portionIndex,
+						'portionDisplacement': __portionDisplacement})
 					)
 				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
 					«exp.target.name».send_message(
-						MessageBody=json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
-						'submatrixRows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
-						'submatrixCols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
-						'submatrixIndex': __portionIndex,
-						'submatrixDisplacement': __portionDisplacement})
+						MessageBody=json.dumps({'portionValues': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+						'portionRows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+						'portionCols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
+						'portionIndex': __portionIndex,
+						'portionDisplacement': __portionDisplacement})
 					)
 				«ELSE»
 					«exp.target.name».send_message(
@@ -1163,14 +1160,46 @@ class FLYGeneratorPython extends AbstractGenerator {
 			} else if (exp.object instanceof RangeLiteral) {
 				val lRange = (exp.object as RangeLiteral).value1
 				val rRange = (exp.object as RangeLiteral).value2
-				return '''
-					for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«lRange», «rRange»):
-						«IF exp.body instanceof BlockExpression»
-							«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
-						«ELSE»
-							«generatePyExpression(exp.body,scope, local)»
-						«ENDIF»
-				'''
+				var llRange = (exp.object as RangeLiteral).value_l1
+				var rrRange = (exp.object as RangeLiteral).value_l2
+				
+				if (llRange !== null && rrRange !== null){ //range with variables
+					return '''
+						for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«llRange.name», «rrRange.name»):
+							«IF exp.body instanceof BlockExpression»
+								«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
+							«ELSE»
+								«generatePyExpression(exp.body,scope, local)»
+							«ENDIF»
+					'''
+				}else if (llRange !== null && rrRange === null){ //range with only left variable
+					return '''
+						for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«llRange.name», «rRange»):
+							«IF exp.body instanceof BlockExpression»
+								«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
+							«ELSE»
+								«generatePyExpression(exp.body,scope, local)»
+							«ENDIF»
+					'''
+				}else if (llRange === null && rrRange !== null){ //range with only right variable
+					return '''
+						for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«lRange», «rrRange.name»):
+							«IF exp.body instanceof BlockExpression»
+								«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
+							«ELSE»
+								«generatePyExpression(exp.body,scope, local)»
+							«ENDIF»
+					'''
+				}else{ //range with only values
+					return '''
+						for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«lRange», «rRange»):
+							«IF exp.body instanceof BlockExpression»
+								«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
+							«ELSE»
+								«generatePyExpression(exp.body,scope, local)»
+							«ENDIF»
+					'''
+				}
 			} else if (exp.object instanceof VariableLiteral) {
 				println("Variable: "+ (exp.object as VariableLiteral).variable.name +" type: "+ typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name)) 
 				if (((exp.object as VariableLiteral).variable.typeobject.equals('var') &&

@@ -212,9 +212,6 @@ class FLYGeneratorJs extends AbstractGenerator {
 			var __fs = require("fs")
 			var __parse = require("csv-parse");
 			
-			var __portionIndex = -1;
-			var __portionDisplacement = -1;
-			
 			«FOR req: exps.expressions.filter(RequireExpression)»
 			
 			«ENDFOR»
@@ -253,10 +250,10 @@ class FLYGeneratorJs extends AbstractGenerator {
 							var __data_«(exp as VariableDeclaration).name» = await new __dataframe(event.data);
 							var «(exp as VariableDeclaration).name» = __data_«(exp as VariableDeclaration).name».toArray();
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-							var __«(exp as VariableDeclaration).name»_length = event.data[0].subarrayLength;
-							__portionIndex = event.data[0].subarrayIndex;
-							__portionDisplacement = event.data[0].subarrayDisplacement;
-							var __«(exp as VariableDeclaration).name»_values = event.data[0].values;
+							var __«(exp as VariableDeclaration).name»_length = event.data[0].portionLength;
+							var __portionIndex = event.data[0].portionIndex;
+							var __portionDisplacement = event.data[0].portionDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = event.data[0].portionValues;
 							
 							«(exp as VariableDeclaration).name» = [];
 							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_length; __i++) {
@@ -264,12 +261,12 @@ class FLYGeneratorJs extends AbstractGenerator {
 							}
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
 							var __«(exp as VariableDeclaration).name»_matrix = event.data[0]
-							var __«(exp as VariableDeclaration).name»_rows = event.data[0].submatrixRows;
-							var __«(exp as VariableDeclaration).name»_cols = event.data[0].submatrixCols;
-							__portionIndex = event.data[0].submatrixIndex;
-							__portionDisplacement = event.data[0].submatrixDisplacement;
-							var __«(exp as VariableDeclaration).name»_values = event.data[0].values
-							var __index = 0
+							var __«(exp as VariableDeclaration).name»_rows = event.data[0].portionRows;
+							var __«(exp as VariableDeclaration).name»_cols = event.data[0].portionCols;
+							var __portionIndex = event.data[0].portionIndex;
+							var __portionDisplacement = event.data[0].portionDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = event.data[0].portionValues;
+							var __index = 0;
 							«(exp as VariableDeclaration).name» = [];
 							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_rows; __i++) {
 								«(exp as VariableDeclaration).name»[__i] = [];
@@ -490,19 +487,19 @@ class FLYGeneratorJs extends AbstractGenerator {
 				
 				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
 					__params = {
-						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
-												'subarrayLength': «generateJsArithmeticExpression(exp.expression,scope)».length,
-												'subarrayIndex': __portionIndex,
-												'subarrayDisplacement': __portionDisplacement}),
+						MessageBody : JSON.stringify({'portionValues': «generateJsArithmeticExpression(exp.expression,scope)», 
+												'portionLength': «generateJsArithmeticExpression(exp.expression,scope)».length,
+												'portionIndex': __portionIndex,
+												'portionDisplacement': __portionDisplacement}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSEIF  exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
 					__params = {
-						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
-												'submatrixRows': «generateJsArithmeticExpression(exp.expression,scope)».length,
-												'submatrixCols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
-												'submatrixIndex':  __portionIndex,
-												'submatrixDisplacement': __portionDisplacement}),
+						MessageBody : JSON.stringify({'portionValues': «generateJsArithmeticExpression(exp.expression,scope)», 
+												'portionRows': «generateJsArithmeticExpression(exp.expression,scope)».length,
+												'portionCols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
+												'portionIndex':  __portionIndex,
+												'portionDisplacement': __portionDisplacement}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSE»

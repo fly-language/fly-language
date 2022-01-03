@@ -560,7 +560,8 @@ class FLYGenerator extends AbstractGenerator {
 				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Directory")){
 					//TO DO
 			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")){
+				(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")
+				|| typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix"))){
 					s+='''
 							String[] mySplits = myObjectInput.split("@@@@@");
 							int mySplitsCount = Integer.parseInt(mySplits[0]);
@@ -568,31 +569,6 @@ class FLYGenerator extends AbstractGenerator {
 							int numThreadsToUse = numThreadsAvailable;
 							if (mySplitsCount < numThreadsAvailable) numThreadsToUse = mySplitsCount;
 							
-							for(int __i=0;__i< numThreadsToUse;__i++){
-								final int i = __i;
-								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-											
-									public Object call() throws Exception {
-										
-										Object __ret = «call.target.name»(mySplits[i+1]);
-										«IF call.isIs_then»
-											«call.then.name»();
-										«ENDIF»					
-										return __ret;
-									}
-								});
-								«call.target.name»_«func_ID»_return.add(_f);
-							}
-						'''
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
-					s+='''
-							String[] mySplits = myObjectInput.split("@@@@@");
-							int mySplitsCount = Integer.parseInt(mySplits[0]);
-							
-							int numThreadsToUse = numThreadsAvailable;
-							if (mySplitsCount < numThreadsAvailable) numThreadsToUse = mySplitsCount;
-										
 							for(int __i=0;__i< numThreadsToUse;__i++){
 								final int i = __i;
 								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
@@ -761,6 +737,7 @@ class FLYGenerator extends AbstractGenerator {
 	import tech.tablesaw.api.StringColumn;
 	import tech.tablesaw.api.IntColumn;
 	import org.json.JSONObject;
+	import org.json.JSONArray;
 	
 	«IF checkAWS() || checkAWSDebug()»
 		import com.amazonaws.AmazonClientException;
@@ -2143,12 +2120,12 @@ class FLYGenerator extends AbstractGenerator {
 									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
 									JSONObject __jsonObject = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
 																		
-									int __arr_length = __jsonObject.getInt("subarrayLength");
-									int __portionIndex = __jsonObject.getInt("subarrayIndex");
-									int __portionDisplacement = __jsonObject.getInt("subarrayDisplacement");
+									int __arr_length = __jsonObject.getInt("portionLength");
+									int __portionIndex = __jsonObject.getInt("portionIndex");
+									int __portionDisplacement = __jsonObject.getInt("portionDisplacement");
 																		
-									//extract values from matrix json string
-									String __valuesJson = __jsonObject.get("values").toString();
+									//extract values from json string
+									String __valuesJson = __jsonObject.get("portionValues").toString();
 									String __extractedItems = __valuesJson.substring(1,__valuesJson.length()-1).replaceAll("\\s", "");
 									String[] __items = __extractedItems.split(",");
 									'''
@@ -2158,13 +2135,13 @@ class FLYGenerator extends AbstractGenerator {
 									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
 									JSONObject __jsonObject = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
 									
-									int __n_rows = __jsonObject.getInt("submatrixRows");
-									int __n_cols = __jsonObject.getInt("submatrixCols");
-									int __portionIndex = __jsonObject.getInt("submatrixIndex");
-									int __portionDisplacement = __jsonObject.getInt("submatrixDisplacement");
+									int __n_rows = __jsonObject.getInt("portionRows");
+									int __n_cols = __jsonObject.getInt("portionCols");
+									int __portionIndex = __jsonObject.getInt("portionIndex");
+									int __portionDisplacement = __jsonObject.getInt("portionDisplacement");
 																				        
-									//extract values from matrix json string
-									String __valuesJson = __jsonObject.get("values").toString();
+									//extract values from json string
+									String __valuesJson = __jsonObject.get("portionValues").toString();
 									String __extractedItems = __valuesJson.replaceAll("\\[", "").replaceAll("\\]", "").replaceAll("\\s", "");
 									String[] __items = __extractedItems.split(",");
 								'''
@@ -2861,18 +2838,18 @@ class FLYGenerator extends AbstractGenerator {
 				}
 				if (expression.type.equals("Array")) {
 					//called only in case of Array on channel on AWS
-					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+
-												" , \"subarrayLength\":"+«generateArithmeticExpression(expression.target,scope)».length+ 
-												",  \"subarrayIndex\":"+__portionIndex+
-												" , \"subarrayDisplacement\":"+__portionDisplacement+"}").toString())'''
+					return '''(new JSONObject("{\"portionValues\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+
+												" , \"portionLength\":"+«generateArithmeticExpression(expression.target,scope)».length+ 
+												",  \"portionIndex\":"+__portionIndex+
+												" , \"portionDisplacement\":"+__portionDisplacement+"}").toString())'''
 				}
 				if (expression.type.equals("Matrix")) {
 					//called only in case of Array on channel on AWS
-					return '''(new JSONObject("{\"values\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+
-												" , \"submatrixRows\":"+«generateArithmeticExpression(expression.target,scope)».length+
-												" , \"submatrixCols\":"+«generateArithmeticExpression(expression.target,scope)»[0].length+
-												" , \"submatrixIndex\":"+__portionIndex+
-												" , \"submatrixDisplacement\":"+__portionDisplacement+"}").toString())'''
+					return '''(new JSONObject("{\"portionValues\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+
+												" , \"portionRows\":"+«generateArithmeticExpression(expression.target,scope)».length+
+												" , \"portionCols\":"+«generateArithmeticExpression(expression.target,scope)»[0].length+
+												" , \"portionIndex\":"+__portionIndex+
+												" , \"portionDisplacement\":"+__portionDisplacement+"}").toString())'''
 				}
 			} else { // parsing
 				if (expression.type.equals("Integer")) {
@@ -3518,7 +3495,7 @@ class FLYGenerator extends AbstractGenerator {
 										String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[__i], displ_«func_ID»[__i]+dimPortions_«func_ID»[__i] ));
 									«ENDIF»
 									
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"subarrayLength\":"+dimPortions_«func_ID»[__i]+",\"subarrayIndex\":"+__i+",\"subarrayDisplacement\":"+displ_«func_ID»[__i]+",\"values\":\""+myArrayPortionString+"\"}");							
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionLength\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":\""+myArrayPortionString+"\"}");							
 									portionInputs_«func_ID».add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));
 								}
 								int numberOfFunctions_«func_ID» = splitCount_«func_ID»;
@@ -3551,7 +3528,7 @@ class FLYGenerator extends AbstractGenerator {
 									offset_«func_ID» += dimPortions_«func_ID»[__i];
 																
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+dimPortions_«func_ID»[__i]+",\"submatrixCols\":"+__cols_«func_ID»+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ_«func_ID»[__i]+",\"values\":[");							
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionRows\":"+dimPortions_«func_ID»[__i]+",\"portionCols\":"+__cols_«func_ID»+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":[");							
 										
 									for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+dimPortions_«func_ID»[__i];__j++){
 										for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
@@ -3598,7 +3575,7 @@ class FLYGenerator extends AbstractGenerator {
 									offset_«func_ID» += dimPortions_«func_ID»[__i];
 									
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+__rows_«func_ID»+",\"submatrixCols\":"+dimPortions_«func_ID»[__i]+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ_«func_ID»[__i]+",\"values\":[");							
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionRows\":"+__rows_«func_ID»+",\"portionCols\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":[");							
 									
 									for(int __j = 0; __j<__rows_«func_ID»;__j++){
 										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+dimPortions_«func_ID»[__i];__z++){
@@ -4382,7 +4359,7 @@ class FLYGenerator extends AbstractGenerator {
 						«ELSE»
 							String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[__i], displ_«func_ID»[__i]+dimPortions_«func_ID»[__i] ));
 						«ENDIF»
-							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"subarrayLength\":"+dimPortions_«func_ID»[__i]+",\"subarrayIndex\":"+__i+",\"subarrayDisplacement\":"+displ_«func_ID»[__i]+",\"values\":"+myArrayPortionString+"}");						
+							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionLength\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":"+myArrayPortionString+"}");						
 						}
 						for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 							final int __i_f = __i;
@@ -4426,7 +4403,7 @@ class FLYGenerator extends AbstractGenerator {
 								offset_«func_ID» += dimPortions_«func_ID»[__i];
 								
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+dimPortions_«func_ID»[__i]+",\"submatrixCols\":"+__cols_«func_ID»+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ_«func_ID»[__i]+",\"values\":[");
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionRows\":"+dimPortions_«func_ID»[__i]+",\"portionCols\":"+__cols_«func_ID»+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":[");
 								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+dimPortions_«func_ID»[__i];__j++){
 									for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
 										«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
@@ -4483,7 +4460,7 @@ class FLYGenerator extends AbstractGenerator {
 									offset_«func_ID» += dimPortions_«func_ID»[__i];
 
 									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"submatrixRows\":"+__rows_«func_ID»+",\"submatrixCols\":"+dimPortions_«func_ID»[__i]+",\"submatrixIndex\":"+__i+",\"submatrixDisplacement\":"+displ_«func_ID»[__i]+",\"values\":[");							
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionRows\":"+__rows_«func_ID»+",\"portionCols\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":[");							
 																		
 									for(int __j = 0; __j<__rows_«func_ID»;__j++){
 										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+dimPortions_«func_ID»[__i];__z++){
@@ -5270,25 +5247,25 @@ class FLYGenerator extends AbstractGenerator {
 				JSONObject __jsonObject = new JSONObject(__«paramName»);
 				__jsonObject = new JSONObject(__jsonObject.getJSONArray("data").get(0).toString());
 				
-				Integer __submatrixRows = __jsonObject.getInt("submatrixRows");
-				Integer __submatrixCols = __jsonObject.getInt("submatrixCols");
-				Integer __portionIndex = __jsonObject.getInt("submatrixIndex");
-				Integer __portionDisplacement = __jsonObject.getInt("submatrixDisplacement");
+				Integer __portionRows = __jsonObject.getInt("portionRows");
+				Integer __portionCols = __jsonObject.getInt("portionCols");
+				Integer __portionIndex = __jsonObject.getInt("portionIndex");
+				Integer __portionDisplacement = __jsonObject.getInt("portionDisplacement");
 
-				«paramMicroType»[][] «paramName» = new «paramMicroType»[__submatrixRows][__submatrixCols];
+				«paramMicroType»[][] «paramName» = new «paramMicroType»[__portionRows][__portionCols];
 				
 				//Re-construct my matrix portion
-				JSONArray __values = __jsonObject.getJSONArray("values");
+				JSONArray __portionValues = __jsonObject.getJSONArray("portionValues");
 				
 				int __indexValues = 0;	
-				for (int i = 0; i < __submatrixRows; i++) {
-					for(int j = 0; j < __submatrixCols; j++){
+				for (int i = 0; i < __portionRows; i++) {
+					for(int j = 0; j < __portionCols; j++){
 						«IF paramMicroType.equals("Integer")»
-							«paramName»[i][j] = new JSONObject(__values.get(__indexValues++).toString()).getInt("value");
+							«paramName»[i][j] = new JSONObject(__portionValues.get(__indexValues++).toString()).getInt("value");
 						«ELSEIF paramMicroType.equals("Double")»
-							«paramName»[i][j] = new JSONObject(__values.get(__indexValues++).toString()).getDouble("value");
+							«paramName»[i][j] = new JSONObject(__portionValues.get(__indexValues++).toString()).getDouble("value");
 						«ELSE»
-							«paramName»[i][j] = new JSONObject(__values.get(__indexValues++).toString()).getString("value");
+							«paramName»[i][j] = new JSONObject(__portionValues.get(__indexValues++).toString()).getString("value");
 						«ENDIF»
 					}
 				}
@@ -5298,23 +5275,23 @@ class FLYGenerator extends AbstractGenerator {
 				JSONObject __jsonObject = new JSONObject(__«paramName»);
 				__jsonObject = new JSONObject(__jsonObject.getJSONArray("data").get(0).toString());
 				
-				Integer __subarrayLength = __jsonObject.getInt("subarrayLength");
-				Integer __portionIndex = __jsonObject.getInt("subarrayIndex");
-				Integer __portionDisplacement = __jsonObject.getInt("subarrayDisplacement");
+				Integer __portionLength = __jsonObject.getInt("portionLength");
+				Integer __portionIndex = __jsonObject.getInt("portionIndex");
+				Integer __portionDisplacement = __jsonObject.getInt("portionDisplacement");
 				
-				«paramMicroType»[] «paramName» = new «paramMicroType»[__subarrayLength];
+				«paramMicroType»[] «paramName» = new «paramMicroType»[__portionLength];
 				
 				//Re-construct my array portion
-				JSONArray __values = __jsonObject.getJSONArray("values");
+				JSONArray __portionValues = __jsonObject.getJSONArray("portionValues");
 				
 				int __indexValues = 0;	
-				for (int i = 0; i < __subarrayLength; i++) {
+				for (int i = 0; i < __portionLength; i++) {
 					«IF paramMicroType.equals("Integer")»
-						«paramName»[i] = __values.getInt(__indexValues++);
+						«paramName»[i] = __portionValues.getInt(__indexValues++);
 					«ELSEIF paramMicroType.equals("Double")»
-						«paramName»[i] = __values.getDouble(__indexValues++);
+						«paramName»[i] = __portionValues.getDouble(__indexValues++);
 					«ELSE»
-						«paramName»[i] = __values.getString(__indexValues++);
+						«paramName»[i] = __portionValues.getString(__indexValues++);
 					«ENDIF»
 				}
 				'''
