@@ -590,10 +590,10 @@ class FLYGenerator extends AbstractGenerator {
 					JSONObject jsonObject = new JSONObject(myObjectInput);
 					jsonObject = new JSONObject(jsonObject.getJSONArray("data").get(0).toString());
 					
-					int portionLength = jsonObject.getInt("portionLength");
-					int portionIndex = jsonObject.getInt("portionIndex");
+					int portionRangeLength = jsonObject.getInt("portionRangeLength");
+					int portionRangeIndex = jsonObject.getInt("portionRangeIndex");
 					
-					for(int _i=0;_i<portionLength;_i++){
+					for(int _i=0;_i<portionRangeLength;_i++){
 						final int __i = _i;
 						Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 							
@@ -2156,26 +2156,33 @@ class FLYGenerator extends AbstractGenerator {
 						if ((dec.right as CastExpression).type.equals("Array")) {
 								typeSystem.get(scope).put(dec.name,"Array_Object")
 								return '''
-									«valuateArithmeticExpression((dec.right as CastExpression),scope)»[] «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)»[]) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
-									if(«dec.name».getClass().getSimpleName().equals("Integer[]")){
-						 				«dec.name» = (Integer[]) «dec.name»;
-									} else if(«dec.name».getClass().getSimpleName().equals("Double[]")){
-						 				«dec.name» = (Double[]) «dec.name»;
-									} else if(«dec.name».getClass().getSimpleName().equals("String[]")){
-						 				«dec.name» = (String[]) «dec.name»;
-									}
-								'''
+									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
+									JSONObject __jsonObject = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
+																		
+									int __arr_length = __jsonObject.getInt("portionLength");
+									int __portionIndex = __jsonObject.getInt("portionIndex");
+									int __portionDisplacement = __jsonObject.getInt("portionDisplacement");
+																		
+									//extract values from json string
+									String __valuesJson = __jsonObject.get("portionValues").toString();
+									String __extractedItems = __valuesJson.substring(1,__valuesJson.length()-1).replaceAll("\\s", "");
+									String[] __items = __extractedItems.split(",");
+									'''
 						} else if ((dec.right as CastExpression).type.equals("Matrix")) {
 								typeSystem.get(scope).put(dec.name,"Matrix_Object")
 								return '''
-									«valuateArithmeticExpression((dec.right as CastExpression),scope)»[][] «dec.name» = («valuateArithmeticExpression((dec.right as CastExpression),scope)»[][]) «((dec.right as CastExpression).target as ChannelReceive).target.name».take();
-									if(«dec.name».getClass().getSimpleName().equals("Integer[][]")){
-						 				«dec.name» = (Integer[][]) «dec.name»;
-									} else if(«dec.name».getClass().getSimpleName().equals("Double[][]")){
-						 				«dec.name» = (Double[][]) «dec.name»;
-									} else if(«dec.name».getClass().getSimpleName().equals("String[][]")){
-						 				«dec.name» = (String[][]) «dec.name»;
-									}
+									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
+									JSONObject __jsonObject = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
+									
+									int __n_rows = __jsonObject.getInt("portionRows");
+									int __n_cols = __jsonObject.getInt("portionCols");
+									int __portionIndex = __jsonObject.getInt("portionIndex");
+									int __portionDisplacement = __jsonObject.getInt("portionDisplacement");
+																				        
+									//extract values from json string
+									String __valuesJson = __jsonObject.get("portionValues").toString();
+									String __extractedItems = __valuesJson.replaceAll("\\[", "").replaceAll("\\]", "").replaceAll("\\s", "");
+									String[] __items = __extractedItems.split(",");
 								'''
 						} else {
 							typeSystem.get(scope).put(dec.name, valuateArithmeticExpression((dec.right as CastExpression),scope))
@@ -2837,14 +2844,12 @@ class FLYGenerator extends AbstractGenerator {
 					return '''((HashMap<Object,Object>) «generateArithmeticExpression(expression.target,scope)»)'''
 				}
 				if (expression.type.equals("Array")) {
-					//called only in case of Array on channel on AWS
 					return '''(new JSONObject("{\"portionValues\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+
 												" , \"portionLength\":"+«generateArithmeticExpression(expression.target,scope)».length+ 
 												",  \"portionIndex\":"+__portionIndex+
 												" , \"portionDisplacement\":"+__portionDisplacement+"}").toString())'''
 				}
 				if (expression.type.equals("Matrix")) {
-					//called only in case of Array on channel on AWS
 					return '''(new JSONObject("{\"portionValues\":"+ Arrays.deepToString(«generateArithmeticExpression(expression.target,scope)»)+
 												" , \"portionRows\":"+«generateArithmeticExpression(expression.target,scope)».length+
 												" , \"portionCols\":"+«generateArithmeticExpression(expression.target,scope)»[0].length+
@@ -3156,7 +3161,6 @@ class FLYGenerator extends AbstractGenerator {
 					} else if (expression.feature.equals("setType")){
 						var s = ""
 						if (typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Object")){
-							//The function is applicable
 							var paramType = generateArithmeticExpression(expression.expressions.get(0),scope).toString()
 							if( paramType.contains("Integer")){
 								typeSystem.get(scope).remove((expression.target as VariableDeclaration).name)
@@ -3188,9 +3192,13 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						return s
 					} else if (expression.feature.equals("getPortionDisplacement")){
-						return "__portionDisplacement"
+						if (scope.equals("main")){ //in main we cannot have a portion so this function is not applicable
+							return "-1"
+						}else return "__portionDisplacement"
 					} else if (expression.feature.equals("getPortionIndex")){
-						return "__portionIndex"
+						if (scope.equals("main")){ //in main we cannot have a portion so this function is not applicable
+							return "-1"
+						}else return "__portionIndex"
 					} else {
 						var s = expression.target.name + "." + expression.feature + "("
 						for (exp : expression.expressions) {
@@ -3266,9 +3274,13 @@ class FLYGenerator extends AbstractGenerator {
 						}
 						return s
 					} else if (expression.feature.equals("getPortionDisplacement")){
-						return "__portionDisplacement"
+						if (scope.equals("main")){ //in main we cannot have a portion so this function is not applicable
+							return "-1"
+						}else return "__portionDisplacement"
 					} else if (expression.feature.equals("getPortionIndex")){
-						return "__portionIndex"
+						if (scope.equals("main")){ //in main we cannot have a portion so this function is not applicable
+							return "-1"
+						}else return "__portionIndex"
 					} else if (expression.feature.equals("deepToString")){ //matrix to string
 						var s = "Arrays." + expression.feature + "(" + expression.target.name + ")"
 						if (t) {
@@ -3620,7 +3632,7 @@ class FLYGenerator extends AbstractGenerator {
 							offset_«func_ID» += dimPortions_«func_ID»[__i];
 							
 							__temp_«func_ID».add(__i,new StringBuilder());
-							__temp_«func_ID».get(__i).append("{\"portionLength\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+"}");							
+							__temp_«func_ID».get(__i).append("{\"portionRangeLength\":"+dimPortions_«func_ID»[__i]+",\"portionRangeIndex\":"+__i+"}");							
 							portionInputs_«func_ID».add(__generateString(__temp_«func_ID».get(__i).toString(),«func_ID»));
 						}
 						numberOfFunctions_«func_ID» = vmCount_«func_ID»;
@@ -3932,7 +3944,6 @@ class FLYGenerator extends AbstractGenerator {
 						'''
 					} else if(call.input.f_index instanceof VariableLiteral &&
 						typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")){
-							// array variable handling
 							   s += '''
 								int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«call.environment.name»").get("nthread");
 								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
@@ -3950,12 +3961,29 @@ class FLYGenerator extends AbstractGenerator {
 									displ_«func_ID»[__i] = offset_«func_ID»;								
 									offset_«func_ID» += dimPortions_«func_ID»[__i];
 									
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
+									«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+										String[] arrayPortion = Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[__i], displ_«func_ID»[__i]+dimPortions_«func_ID»[__i]);
+										String myArrayPortionString = "[";
+										for (int x=0; x < arrayPortion.length; x++) {
+											if ( x < arrayPortion.length-1){
+												myArrayPortionString += "\""+arrayPortion[x]+"\",";
+											}else{
+												myArrayPortionString += "\""+arrayPortion[x]+"\"]";
+											 }
+										}
+									«ELSE»
+										String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[__i], displ_«func_ID»[__i]+dimPortions_«func_ID»[__i] ));
+									«ENDIF»
+									
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionLength\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":"+myArrayPortionString+"}");									
+									
 									final int i = __i;
 									Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 												
 										public Object call() throws Exception {
 											
-											Object __ret = «call.target.name»(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[i], displ_«func_ID»[i]+dimPortions_«func_ID»[i] ));
+											Object __ret = «call.target.name»(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(i).toString(),«func_ID»));
 											«IF call.isIs_then»
 												«call.then.name»();
 											«ENDIF»					
@@ -3972,40 +4000,46 @@ class FLYGenerator extends AbstractGenerator {
 									int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«call.environment.name»").get("nthread");
 									ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 									int  __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+									int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
+																	
+									int __current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = 0;
 									
 									if ( __rows_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __rows_«func_ID»;
 									
-									int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
-									int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
-									int offset = 0;
+									int[] dimPortions_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+									int[] displ_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+									int offset_«func_ID» = 0;
 									
 									for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-										dimPortions[__i] = ( __rows_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+										dimPortions_«func_ID»[__i] = ( __rows_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
 											((__i < ( __rows_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
-										displ[__i] = offset;
-										offset += dimPortions[__i];
+										displ_«func_ID»[__i] = offset_«func_ID»;
+										offset_«func_ID» += dimPortions_«func_ID»[__i];
 										
-										//Get the type of element inside the matrix and generate the submatrix
-										«typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-											.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-											typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-											)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-															.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-																typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-															)»[dimPortions[__i]][];
-														
-										for (int i = 0, k = displ[__i]; k < (displ[__i] + dimPortions[__i]); i++, k++) {
-											subMatrix[i] = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-																										.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-																											typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-																										)»[«(call.input.f_index as VariableLiteral).variable.name»[i].length];
-										    System.arraycopy(«(call.input.f_index as VariableLiteral).variable.name»[k], 0, subMatrix[i], 0, subMatrix[i].length);
+										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
+										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionRows\":"+dimPortions_«func_ID»[__i]+",\"portionCols\":"+__cols_«func_ID»+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":[");							
+											
+										for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+dimPortions_«func_ID»[__i];__j++){
+											for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
+												«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+													__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":\""+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"\"},");
+												«ELSE»
+													__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+												«ENDIF»
+											}
+											if(__j == __current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» + dimPortions_«func_ID»[__i]-1) {
+												__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
+												__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("]}");
+											}
 										}
+										__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» +=dimPortions_«func_ID»[__i];
+										
+										final int i = __i;
 										Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 													
 											public Object call() throws Exception {
 												
-												Object __ret = «call.target.name»(subMatrix);
+												Object __ret = «call.target.name»(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(i).toString(),«func_ID»));
 												«IF call.isIs_then»
 													«call.then.name»();
 												«ENDIF»					
@@ -4021,39 +4055,45 @@ class FLYGenerator extends AbstractGenerator {
 								ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
 								int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
 								int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+								int __current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = 0;
 								
 								if ( __cols_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __cols_«func_ID»;
 								
-								int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
-								int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
-								int offset = 0;
+								int[] dimPortions_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+								int[] displ_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+								int offset_«func_ID» = 0;
 								
 								for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 								
-									dimPortions[__i] = (__cols_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+									dimPortions_«func_ID»[__i] = (__cols_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
 										((__i < (__cols_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
-									displ[__i] = offset;
-									offset += dimPortions[__i];
+									displ_«func_ID»[__i] = offset_«func_ID»;
+									offset_«func_ID» += dimPortions_«func_ID»[__i];
 									
-									//Get the type of element inside the matrix and generate the submatrix
-									«typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-										.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-										typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-										)»[][] subMatrix = new «typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name)
-														.substring(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).indexOf("_") + 1,
-															typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).lastIndexOf("_")
-														)»[__rows_«func_ID»][dimPortions[__i]];
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionRows\":"+__rows_«func_ID»+",\"portionCols\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":[");							
 									
-									for (int i = 0; i < __rows_«func_ID»; i++) {
-										for (int j = 0, k = displ[__i]; j < dimPortions[__i]; j++, k++) {
-											subMatrix[i][j] = «(call.input.f_index as VariableLiteral).variable.name»[i][k];
+									for(int __j = 0; __j<__rows_«func_ID»;__j++){
+										for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+dimPortions_«func_ID»[__i];__z++){
+											«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+												__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":\""+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"\"},");
+											«ELSE»
+												__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+											«ENDIF»
+										}
+										if(__j == __rows_«func_ID»-1) {
+											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
+											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("]}");
 										}
 									}
+									__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+=dimPortions_«func_ID»[__i];
+
+									final int i = __i;
 									Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 												
 										public Object call() throws Exception {
 											
-											Object __ret = «call.target.name»(subMatrix);
+											Object __ret = «call.target.name»(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(i).toString(),«func_ID»));
 											«IF call.isIs_then»
 												«call.then.name»();
 											«ENDIF»					
@@ -4849,11 +4889,7 @@ class FLYGenerator extends AbstractGenerator {
 		println("test channel send " + send.expression)
 		switch env {
 			case "smp":
-				if ( (send.expression instanceof CastExpression) && ((send.expression as CastExpression).op.equals("as")) && ((send.expression as CastExpression).type.equals("Array") || (send.expression as CastExpression).type.equals("Matrix"))){					
-					return '''«(send.target as VariableDeclaration).name».add(«generateArithmeticExpression((send.expression as CastExpression).target,scope)»)'''
-				}else{
-					return '''«(send.target as VariableDeclaration).name».add(«generateArithmeticExpression(send.expression,scope)»)'''
-				}
+				return '''«(send.target as VariableDeclaration).name».add(«generateArithmeticExpression(send.expression,scope)»)'''
 			case "aws":
 				return '''__sqs_«env_name».sendMessage(new SendMessageRequest(__sqs_«env_name».getQueueUrl("«send.target.name»-"+__id_execution).getQueueUrl(), String.valueOf(«generateArithmeticExpression(send.expression,scope)»)));'''
 			case "aws-debug":
