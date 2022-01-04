@@ -254,6 +254,9 @@ class FLYGenerator extends AbstractGenerator {
 									.withCredentials(new AWSStaticCredentialsProvider(creds))
 									.build();
 				«ELSEIF element.right instanceof DeclarationObject
+					&& (element.right as DeclarationObject).features.get(0).value_s.equals("azure") »
+					static AzureClient «element.name» = null;
+				«ELSEIF element.right instanceof DeclarationObject
 					&& ((element.right as DeclarationObject).features.get(0).value_s.equals("smp") || (element.right as DeclarationObject).features.get(0).value_s.equals("vm-cluster")
 						|| (element.right as DeclarationObject).features.get(0).value_s.equals("channel")) »
 					«generateVariableDeclaration(element,"main")»				
@@ -283,22 +286,6 @@ class FLYGenerator extends AbstractGenerator {
 			String vmTypeSize_«id_execution» = (String) __fly_environment.get("«vm_cluster_name»").get("vm_type_size");
 			boolean persistent_«id_execution» = Boolean.parseBoolean((String) __fly_environment.get("«vm_cluster_name»").get("persistent"));
 			int vmCount_«id_execution» = Integer.parseInt((String) __fly_environment.get("«vm_cluster_name»").get("count"));
-			
-			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-			filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
-				terminationQueue = "ch-termination-"+__id_execution;
-
-				«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
-					"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
-					"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
-					"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
-					__id_execution+"",
-					"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»",
-					terminationQueue);
-				
-				«element.name».VMClusterInit();
-				«element.name».setupQueue(terminationQueue);
-			«ENDFOR»
 			
 			try{
 
@@ -3385,7 +3372,25 @@ class FLYGenerator extends AbstractGenerator {
 	
 	def generateVMClusterFlyFunctionCall(FlyFunctionCall call, String scope) {
 		
+		var clusterEnv = (call.environment.environment.get(0).right as DeclarationObject).features.get(0).value_s
+		var clusterEnvName = call.environment.environment.get(0).name
+
 		var s = '''
+			«IF clusterEnv.equals("azure")»
+				final String __termination_«call.target.name»_«func_termination_counter» = "termination-«call.target.name»-"+__id_execution;
+
+				«clusterEnvName» = new AzureClient("«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
+									"«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
+									"«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
+									"«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
+									__id_execution+"",
+									"«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»",
+									__termination_«call.target.name»_«func_termination_counter»);
+				
+				«clusterEnvName».VMClusterInit();
+				«clusterEnvName».setupQueue(__termination_«call.target.name»_«func_termination_counter»);
+			«ENDIF»
+						
 			«FOR element: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
 				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
 				«IF !(element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp")»
@@ -3403,13 +3408,15 @@ class FLYGenerator extends AbstractGenerator {
 				«ENDIF»
 			«ENDFOR»
 			
-			«call.environment.environment.get(0).name» = new AWSClient(creds, "«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»", __termination_«call.target.name»_url_«func_termination_counter»);
+			«IF clusterEnv.equals("aws")»
+				«clusterEnvName» = new AWSClient(creds, "«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»", __termination_«call.target.name»_url_«func_termination_counter»);
+			«ENDIF»
 			
-			int vCPUsCount_«func_ID» = «call.environment.environment.get(0).name».getVCPUsCount(vmTypeSize_«id_execution»);
+			int vCPUsCount_«func_ID» = «clusterEnvName».getVCPUsCount(vmTypeSize_«id_execution»);
 			
-			«call.environment.environment.get(0).name».zipAndUploadCurrentProject();
+			«clusterEnvName».zipAndUploadCurrentProject();
 					
-			int vmsCreatedCount_«func_ID» = «call.environment.environment.get(0).name».launchVMCluster(vmTypeSize_«id_execution», purchasingOption_«id_execution», persistent_«id_execution», vmCount_«id_execution»);
+			int vmsCreatedCount_«func_ID» = «clusterEnvName».launchVMCluster(vmTypeSize_«id_execution», purchasingOption_«id_execution», persistent_«id_execution», vmCount_«id_execution»);
 			
 			if ( vmsCreatedCount_«func_ID» != 0) {
 				System.out.print("\n\u27A4 Waiting for virtual machines boot script to complete...");
@@ -3417,7 +3424,7 @@ class FLYGenerator extends AbstractGenerator {
 				System.out.println("Done");
 			}
 			if(vmsCreatedCount_«func_ID» != vmCount_«id_execution»){
-				if ( vmsCreatedCount_«func_ID» > 0) «call.environment.environment.get(0).name».downloadFLYProjectonVMCluster();
+				if ( vmsCreatedCount_«func_ID» > 0) «clusterEnvName».downloadFLYProjectonVMCluster();
 				
 				System.out.print("\n\u27A4 Waiting for download project on VM CLuster to complete...");
 				while (__termination_«call.target.name»_ch_«func_termination_counter».size() != (vmCount_«id_execution»+vmsCreatedCount_«func_ID»));
@@ -3425,7 +3432,7 @@ class FLYGenerator extends AbstractGenerator {
 			System.out.println("Done");
 			
 			String mainClass_«func_ID» = "«name»_«call.target.name»";
-			«call.environment.environment.get(0).name».buildFLYProjectOnVMCluster(mainClass_«func_ID»);
+			«clusterEnvName».buildFLYProjectOnVMCluster(mainClass_«func_ID»);
 			
 			System.out.print("\n\u27A4 Waiting for building project on VM CLuster to complete...");
 			if(vmsCreatedCount_«func_ID» != vmCount_«id_execution»){
@@ -3647,7 +3654,7 @@ class FLYGenerator extends AbstractGenerator {
 			}
 			
 			s += '''
-				«call.environment.environment.get(0).name».executeFLYonVMCluster(portionInputs_«func_ID»,
+				«clusterEnvName».executeFLYonVMCluster(portionInputs_«func_ID»,
 												numberOfFunctions_«func_ID»,
 												__id_execution);
 				
@@ -3661,7 +3668,7 @@ class FLYGenerator extends AbstractGenerator {
 				System.out.println("Done");
 				
 				//Check for execution errors
-				String err_«func_ID» = «call.environment.environment.get(0).name».checkForExecutionErrors();
+				String err_«func_ID» = «clusterEnvName».checkForExecutionErrors();
 				if (err_«func_ID» != null) {
 					//Print the error within each VM
 					System.out.println("The execution failed with the following errors in each VM:");
@@ -3675,7 +3682,7 @@ class FLYGenerator extends AbstractGenerator {
 				}
 				
 				//Delete documents with commands
-				«call.environment.environment.get(0).name».cleanResources();
+				«clusterEnvName».cleanResources();
 				//Clear termination queue for eventual next iteration
 				__termination_«call.target.name»_ch_«func_termination_counter++».clear();
 				
@@ -3688,7 +3695,7 @@ class FLYGenerator extends AbstractGenerator {
 
 	def generateLocalFlyFunction(FlyFunctionCall call, String scope) {
 		var s = ''''''
-		if ((call.input as FunctionInput).is_for_index) { // 'for 'keyword 
+		if ((call.input as FunctionInput).is_for_index) { // 'for 'keyword
 			s = '''
 				final List<Future<Object>> «call.target.name»_«func_ID»_return = new ArrayList<Future<Object>>();
 			'''
