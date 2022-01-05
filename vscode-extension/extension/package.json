@@ -105,6 +105,11 @@
         },
         "keybindings": [
             {
+                "key": "alf+s",
+                "mac": "command+s",
+                "command": "fly.diagram.export"
+            },
+            {
                 "key": "alt+f",
                 "mac": "alt+f",
                 "command": "fly.diagram.fit",
@@ -141,7 +146,7 @@
         "syntaxes",
         "webview"
     ],
-    "main": "./pack/fly-extension",
+    "main": "./pack/fly-extension.js",
     "dependencies": {
         "sprotty-vscode": "^0.1.0"
     },

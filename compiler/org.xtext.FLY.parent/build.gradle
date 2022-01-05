@@ -8,7 +8,10 @@ buildscript {
 }
 
 subprojects {
-	ext.xtextVersion = '2.21.0'
+	ext.xtextVersion = '2.22.0'
+	ext.sprottyVersion = "0.8.0"
+	ext.elkVersion = "0.7.0"
+	
 	repositories {
 		mavenCentral()
 	}
@@ -25,8 +28,8 @@ subprojects {
 	group = 'org.xtext.FLY'
 	version = '1.0.0-SNAPSHOT'
 	
-	sourceCompatibility = '1.8'
-	targetCompatibility = '1.8'
+	sourceCompatibility = '11'
+	targetCompatibility = '11'
 	
 	configurations.all {
 		exclude group: 'asm'

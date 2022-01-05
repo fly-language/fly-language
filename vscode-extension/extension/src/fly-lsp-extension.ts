@@ -35,8 +35,8 @@ export class FLYLspVscodeExtension extends SprottyLspEditVscodeExtension {
     }
 
     protected activateLanguageClient(context: vscode.ExtensionContext): LanguageClient {
-        const executable = process.platform === 'win32' ? 'fly-language-server.bat' : 'fly-language-server';
-        const languageServerPath =  path.join('server', 'fly-language-server', 'bin', executable);
+        const executable = process.platform === 'win32' ? 'fly-server.bat' : 'fly-server';
+        const languageServerPath =  path.join('server', 'bin', executable);
         const serverLauncher = context.asAbsolutePath(languageServerPath);
         const serverOptions: ServerOptions = {
             run: {

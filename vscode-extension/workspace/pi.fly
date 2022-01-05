@@ -3,7 +3,7 @@ var local = [type="smp", nthread=4]
 var ch = [type="channel"] on local
 
 func pi(){	
-   var r = [type="random"]
+   var r = [type="random", fa='ci']
    var x = r.nextDouble()
    var y = r.nextDouble()
    var msg = 0

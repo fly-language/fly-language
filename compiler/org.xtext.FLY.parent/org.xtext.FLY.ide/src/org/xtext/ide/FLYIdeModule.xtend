@@ -2,6 +2,7 @@ package org.xtext.ide
 
 import org.eclipse.xtext.ide.server.codeActions.ICodeActionService2
 import org.xtext.ide.server.codeActions.FlyCodeActionService
+import org.eclipse.xtext.ide.server.hover.HoverService
 
 /**
  * Use this class to register ide components.
@@ -9,6 +10,6 @@ import org.xtext.ide.server.codeActions.FlyCodeActionService
 class FLYIdeModule extends AbstractFLYIdeModule {
 	
 	def Class<? extends ICodeActionService2> bindICodeActionService2() {
-		FlyCodeActionService
-	}
+		return FlyCodeActionService
+	}	
 }
