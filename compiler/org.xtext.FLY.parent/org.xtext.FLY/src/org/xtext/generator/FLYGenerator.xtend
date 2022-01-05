@@ -183,6 +183,7 @@ class FLYGenerator extends AbstractGenerator {
 	import java.io.FileWriter;
 	import java.io.IOException;
 	import java.util.HashMap;
+	import java.util.Base64;
 	import java.time.LocalDate;
 	import java.util.concurrent.LinkedTransferQueue;
 	import java.util.concurrent.ExecutorService;
@@ -298,21 +299,19 @@ class FLYGenerator extends AbstractGenerator {
 			}catch(Exception e){
 				e.printStackTrace();
 			}finally{
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[((right as DeclarationObject).features.get(0).value_s.equals("aws"))]»
-					«element.name».deleteResourcesAllocated();
-				«ENDFOR»
-				
 				«FOR element: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
 					filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-					«IF !(element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp")»
-						__wait_on_«element.name»=false;
+					__wait_on_«element.name»=false;
+					«IF (element.environment.get(0).right as DeclarationObject).features.get(0).equals("aws")»
 						__sqs_«element.environment.get(0).name».deleteQueue(new DeleteQueueRequest("«element.name»-"+__id_execution));
 					«ENDIF»
 				«ENDFOR»
 				
 				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[(environment.right as DeclarationObject).features.get(0).value_s.equals("vm-cluster")]»
-					__sqs_«(element.environment as VariableDeclaration).environment.get(0).name».deleteQueue(new DeleteQueueRequest("termination-«element.target.name»-"+__id_execution));
+					«IF ((element.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(0).equals("aws")»
+						__sqs_«(element.environment as VariableDeclaration).environment.get(0).name».deleteQueue(new DeleteQueueRequest("termination-«element.target.name»-"+__id_execution));
+					«ENDIF»
+					«(element.environment as VariableDeclaration).environment.get(0).name».deleteResourcesAllocated();
 				«ENDFOR» 
 				
 				«FOR el: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
@@ -396,6 +395,7 @@ class FLYGenerator extends AbstractGenerator {
 	import java.util.Comparator;
 	import java.util.Map;
 	import java.util.Scanner;
+	import java.util.Base64;
 	import org.apache.commons.io.FileUtils;
 	import org.apache.commons.io.FileUtils;
 	import java.sql.*;
@@ -2105,6 +2105,10 @@ class FLYGenerator extends AbstractGenerator {
 								typeSystem.get(scope).put(dec.name,"Array_Object")
 								return '''
 									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
+									«IF ((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure"))»
+										byte[] decodedBytes = Base64.getDecoder().decode(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
+										__res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = new String(decodedBytes);
+									«ENDIF»
 									JSONObject __jsonObject = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
 																		
 									int __arr_length = __jsonObject.getInt("portionLength");
@@ -2120,6 +2124,10 @@ class FLYGenerator extends AbstractGenerator {
 								typeSystem.get(scope).put(dec.name,"Matrix_Object")
 								return '''
 									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
+									«IF ((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure"))»
+										byte[] decodedBytes = Base64.getDecoder().decode(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
+										__res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = new String(decodedBytes);
+									«ENDIF»
 									JSONObject __jsonObject = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
 									
 									int __n_rows = __jsonObject.getInt("portionRows");
@@ -3440,7 +3448,16 @@ class FLYGenerator extends AbstractGenerator {
 			} else {
 				while (__termination_«call.target.name»_ch_«func_termination_counter».size() != (vmCount_«id_execution»*2));
 			}
-			System.out.println("Done");			
+			System.out.println("Done");
+			
+			//Check for building errors
+			String err_build_«func_ID» = «clusterEnvName».checkBuildingStatus();
+			if (err_build_«func_ID» != null) {
+				//Print the error within each VM
+				System.out.println("The building failed with the following errors in each VM:");
+				System.out.println(err_build_«func_ID»);
+				return;
+			}		
 			'''
 			
 			//Workload input splitting on VM Cluster
@@ -3668,11 +3685,11 @@ class FLYGenerator extends AbstractGenerator {
 				System.out.println("Done");
 				
 				//Check for execution errors
-				String err_«func_ID» = «clusterEnvName».checkForExecutionErrors();
-				if (err_«func_ID» != null) {
+				String err_exec_«func_ID» = «clusterEnvName».checkForExecutionErrors();
+				if (err_exec_«func_ID» != null) {
 					//Print the error within each VM
 					System.out.println("The execution failed with the following errors in each VM:");
-					System.out.println(err_«func_ID»);
+					System.out.println(err_exec_«func_ID»);
 				}else {
 					//No execution errors
 					//Manage the callback
@@ -3681,8 +3698,11 @@ class FLYGenerator extends AbstractGenerator {
 					«ENDIF»
 				}
 				
-				//Delete documents with commands
-				«clusterEnvName».cleanResources();
+				«IF clusterEnv.equals("aws")»
+					//Delete documents with commands
+					«clusterEnvName».cleanResources();
+				«ENDIF»
+
 				//Clear termination queue for eventual next iteration
 				__termination_«call.target.name»_ch_«func_termination_counter++».clear();
 				
