@@ -53,6 +53,9 @@ import java.util.Arrays
 import org.xtext.fLY.EnvironemtLiteral
 import org.xtext.fLY.DeclarationFeature
 import org.eclipse.xtext.service.AllRulesCache.AllRulesCacheAdapter
+import org.xtext.fLY.ArrayInit
+import org.xtext.fLY.ArrayValue
+import org.xtext.fLY.ConstantDeclaration
 
 class FLYGeneratorPython extends AbstractGenerator {
 	String name = null
@@ -268,7 +271,6 @@ class FLYGeneratorPython extends AbstractGenerator {
 		
 		«FOR fd:functionCalled.values()»
 			«generatePyExpression(fd, name, local)»
-			
 		«ENDFOR»	
 				
 		def main(event):
@@ -347,6 +349,10 @@ class FLYGeneratorPython extends AbstractGenerator {
 			import azure.functions as func
 			from azure.storage.queue import QueueServiceClient
 			«ENDIF»
+						
+			«FOR exp : resourceInput.allContents.toIterable.filter(ConstantDeclaration)»
+				«generatePyExpression(exp,name,local)»
+			«ENDFOR»
 			
 			«IF env.contains("aws") »			
 			def handler(event,context):
@@ -370,13 +376,23 @@ class FLYGeneratorPython extends AbstractGenerator {
 						__columns = data[0].keys()
 						«(exp as VariableDeclaration).name» = pd.read_json(json.dumps(data))
 						«(exp as VariableDeclaration).name» = «(exp as VariableDeclaration).name»[__columns]
+					«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
+						__«(exp as VariableDeclaration).name»_length = data[0]['portionLength']
+						__portionIndex = data[0]['portionIndex']
+						__portionDisplacement = data[0]['portionDisplacement']
+						__«(exp as VariableDeclaration).name»_values = data[0]['portionValues']
+						
+						«(exp as VariableDeclaration).name» = [0 for x in range(__«(exp as VariableDeclaration).name»_length)]
+						for __i in range(__«(exp as VariableDeclaration).name»_length):
+							«(exp as VariableDeclaration).name»[__i] = __«(exp as VariableDeclaration).name»_values[__i]
+							
 					«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
 						__«(exp as VariableDeclaration).name»_matrix = data[0]
-						__«(exp as VariableDeclaration).name»_rows = data[0]['rows']
-						__«(exp as VariableDeclaration).name»_cols = data[0]['cols']
-						submatrixIndex = data[0]['submatrixIndex']
-						matrixType = data[0]['matrixType']
-						__«(exp as VariableDeclaration).name»_values = data[0]['values']
+						__«(exp as VariableDeclaration).name»_rows = data[0]['portionRows']
+						__«(exp as VariableDeclaration).name»_cols = data[0]['portionCols']
+						__portionIndex = data[0]['portionIndex']
+						__portionDisplacement = data[0]['portionDisplacement']
+						__«(exp as VariableDeclaration).name»_values = data[0]['portionValues']
 						__index = 0
 						«(exp as VariableDeclaration).name» = [None] * (__«(exp as VariableDeclaration).name»_rows * __«(exp as VariableDeclaration).name»_cols)
 						for __i in range(__«(exp as VariableDeclaration).name»_rows):
@@ -439,13 +455,20 @@ __index+=1
 				«exp.target.name».write(json.dumps(«generatePyArithmeticExpression(exp.expression, scope, local)»).encode('utf8'))
 				
 			«ELSEIF (env.contains("aws"))»
-				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
 					«exp.target.name».send_message(
-						MessageBody=json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
-						'rows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
-						'cols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
-						'submatrixIndex': submatrixIndex,
-						'matrixType': matrixType})
+						MessageBody=json.dumps({'portionValues': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+						'portionLength': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+						'portionIndex': __portionIndex,
+						'portionDisplacement': __portionDisplacement})
+					)
+				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					«exp.target.name».send_message(
+						MessageBody=json.dumps({'portionValues': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+						'portionRows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+						'portionCols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
+						'portionIndex': __portionIndex,
+						'portionDisplacement': __portionDisplacement})
 					)
 				«ELSE»
 					«exp.target.name».send_message(
@@ -458,12 +481,18 @@ __index+=1
 			«ELSEIF env=="k8s"»
 					redisClient.lpush('queue:jobs',«generatePyArithmeticExpression(exp.expression, scope, local)»)
 				__queue_service_client = __queue_service.get_queue_client('«exp.target.name»-"${id}"')
-				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
-					__queue_service_client.send_message(json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
-											'rows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
-											'cols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
-											'submatrixIndex': submatrixIndex,
-											'matrixType': matrixType})
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
+					__queue_service_client.send_message(json.dumps({'portionValues': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+											'portionLength': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+											'portionIndex': __portionIndex,
+											'portionDisplacement': __portionDisplacement})
+										)
+				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					__queue_service_client.send_message(json.dumps({'portionValues': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+											'portionRows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+											'portionCols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
+											'portionIndex': __portionIndex,
+											'portionDisplacement': __portionDisplacement})
 										)
 				«ELSE»
 					__queue_service_client.send_message(«generatePyArithmeticExpression(exp.expression, scope, local)»)
@@ -500,13 +529,14 @@ __index+=1
 					if((exp.right as ArrayDefinition).indexes.length==1){
 						var len = (exp.right as ArrayDefinition).indexes.get(0).value
 						typeSystem.get(scope).put(exp.name, "Array_"+type)
-						s += '''«exp.name» = [None] * «generatePyArithmeticExpression(len, scope, local)»'''
+						s += '''«exp.name» = [0 for x in range(«generatePyArithmeticExpression(len, scope, local)»)] '''						
 					}else if((exp.right as ArrayDefinition).indexes.length==2){
 						var row = (exp.right as ArrayDefinition).indexes.get(0).value
 						var col = (exp.right as ArrayDefinition).indexes.get(1).value
 						typeSystem.get(scope).put(exp.name, "Matrix_"+type+"_"+generatePyArithmeticExpression(col, scope, local))
-						s += '''«exp.name» = [None] * («generatePyArithmeticExpression(row, scope, local)»* «generatePyArithmeticExpression(col, scope, local)»)'''
-					}else if((exp.right as ArrayDefinition).indexes.length==3){
+						s += '''«exp.name» = [[0 for x in range(«generatePyArithmeticExpression(col, scope, local)»)] for y in range(«generatePyArithmeticExpression(row, scope, local)»)]'''
+						
+					}else if((exp.right as ArrayDefinition).indexes.length==3){ // TO FIX
 						var row = (exp.right as ArrayDefinition).indexes.get(0).value
 						var col = (exp.right as ArrayDefinition).indexes.get(1).value
 						var dep = (exp.right as ArrayDefinition).indexes.get(2).value
@@ -1136,9 +1166,9 @@ __index+=1
 			}
 			if (assignment.feature_obj instanceof IndexObject) {
 				if (typeSystem.get(scope).get((assignment.feature_obj as IndexObject).name.name).contains("Array")) {
-					return '''
-					«(assignment.feature_obj as IndexObject).name.name»[«generatePyArithmeticExpression((assignment.feature_obj as IndexObject).indexes.get(0).value, scope, local)»] = «generatePyArithmeticExpression((assignment.value), scope, local)»
-					'''
+					if ((assignment.feature_obj as IndexObject).indexes.length == 1) {
+						return '''«generatePyArithmeticExpression(assignment.feature_obj,scope, local)» =  «generatePyArithmeticExpression(assignment.value,scope, local)»'''	
+					}
 				} else if (typeSystem.get(scope).get((assignment.feature_obj as IndexObject).name.name).contains("Matrix")) {
 					if ((assignment.feature_obj as IndexObject).indexes.length == 2) {
 						return '''«generatePyArithmeticExpression(assignment.feature_obj,scope, local)» =  «generatePyArithmeticExpression(assignment.value,scope, local)»'''	
@@ -1162,17 +1192,74 @@ __index+=1
 	def generatePyForExpression(ForExpression exp, String scope, boolean local) {
 		if(exp.index.indices.length == 1){
 			if (exp.object instanceof CastExpression) {
-			if ((exp.object as CastExpression).type.equals("Dat")) {
-				return '''
-				for «(exp.index.indices.get(0) as VariableDeclaration).name» in «(exp.object as VariableLiteral).variable.name».itertuples(index=False):
-					«IF exp.body instanceof BlockExpression»
-					«FOR e: (exp.body as BlockExpression).expressions»
-					«generatePyExpression(e,scope, local)»
-					«ENDFOR»
-					«ELSE»
-					«generatePyExpression(exp.body,scope, local)»
-					«ENDIF»
-				'''
+				if ((exp.object as CastExpression).type.equals("Dat")) {
+					return '''
+					for «(exp.index.indices.get(0) as VariableDeclaration).name» in «(exp.object as VariableLiteral).variable.name».itertuples(index=False):
+						«IF exp.body instanceof BlockExpression»
+						«FOR e: (exp.body as BlockExpression).expressions»
+						«generatePyExpression(e,scope, local)»
+						«ENDFOR»
+						«ELSE»
+						«generatePyExpression(exp.body,scope, local)»
+						«ENDIF»
+					'''
+				} else if ((exp.object as CastExpression).type.equals("Object")) {
+					val variableName = (exp.index.indices.get(0) as VariableDeclaration).name
+					return '''
+						for «variableName»k, «variableName»v in «((exp.object as CastExpression).target as VariableLiteral).variable.name».items():
+							«(exp.index.indices.get(0) as VariableDeclaration).name» = {'k': «variableName»k, 'v': «variableName»v} 
+							«IF exp.body instanceof BlockExpression»
+							«FOR e: (exp.body as BlockExpression).expressions»
+								«generatePyExpression(e,scope, local)»
+							«ENDFOR»
+							«ELSE»
+								«generatePyExpression(exp.body,scope, local)»	
+							«ENDIF»
+					'''
+				}
+			} else if (exp.object instanceof RangeLiteral) {
+				val lRange = (exp.object as RangeLiteral).value1
+				val rRange = (exp.object as RangeLiteral).value2
+				var llRange = (exp.object as RangeLiteral).value_l1
+				var rrRange = (exp.object as RangeLiteral).value_l2
+				
+				if (llRange !== null && rrRange !== null){ //range with variables
+					return '''
+						for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«llRange.name», «rrRange.name»):
+							«IF exp.body instanceof BlockExpression»
+								«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
+							«ELSE»
+								«generatePyExpression(exp.body,scope, local)»
+							«ENDIF»
+					'''
+				}else if (llRange !== null && rrRange === null){ //range with only left variable
+					return '''
+						for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«llRange.name», «rRange»):
+							«IF exp.body instanceof BlockExpression»
+								«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
+							«ELSE»
+								«generatePyExpression(exp.body,scope, local)»
+							«ENDIF»
+					'''
+				}else if (llRange === null && rrRange !== null){ //range with only right variable
+					return '''
+						for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«lRange», «rrRange.name»):
+							«IF exp.body instanceof BlockExpression»
+								«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
+							«ELSE»
+								«generatePyExpression(exp.body,scope, local)»
+							«ENDIF»
+					'''
+				}else{ //range with only values
+					return '''
+						for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«lRange», «rRange»):
+							«IF exp.body instanceof BlockExpression»
+								«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
+							«ELSE»
+								«generatePyExpression(exp.body,scope, local)»
+							«ENDIF»
+					'''
+				}
 			} else if (exp.object instanceof VariableLiteral) {
 				println("Variable: "+ (exp.object as VariableLiteral).variable.name +" type: "+ typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name)) 
 				if (((exp.object as VariableLiteral).variable.typeobject.equals('var') &&
@@ -1465,6 +1552,7 @@ __index+=1
 			case "Dat": return '''pd.read_json(«generatePyArithmeticExpression(cast.target, scope, local)»)'''
 			case "Object": return '''«generatePyArithmeticExpression(cast.target, scope, local)»'''
 			case "Double": return '''float(«generatePyArithmeticExpression(cast.target, scope, local)»)'''
+			case "Array": return '''«generatePyArithmeticExpression(cast.target, scope, local)»'''
 			case "Matrix": return '''«generatePyArithmeticExpression(cast.target, scope, local)»'''
 		}	
 	}
@@ -1570,7 +1658,10 @@ __index+=1
 			if (exp.target.typeobject.equals("var")) {
 				if (exp.feature.equals("split")) {
 					return "String[]"
-				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length")) {
+				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length")
+					|| exp.feature.equals("getPortionIndex") || exp.feature.equals("getPortionDisplacement")
+					|| exp.feature.equals("rowCount") || exp.feature.equals("colCount")
+				) {
 					return "Integer"
 				} else if (exp.feature.equals("concat") || exp.feature.equals("substring") ||
 					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase")) {
@@ -1706,6 +1797,121 @@ __index+=1
 				default :{
 					return generatePyArithmeticExpression(expression, scope, local)
 				}
+			}
+		}else if (expression.target.right instanceof ArrayInit ){
+			if(((expression.target.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
+					((expression.target.right as ArrayInit).values.get(0) instanceof StringLiteral) ||
+					((expression.target.right as ArrayInit).values.get(0) instanceof FloatLiteral)
+				){ //array mono-dimensional	
+					if(expression.feature.equals("length")){
+						var s = "len("+expression.target.name + ")"
+						return s
+					} else if (expression.feature.equals("deepToString")){
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''print('The function setType is ineffective: the array has already a type')'''
+					} else if (expression.feature.equals("getPortionIndex") || expression.feature.equals("getPortionIndex")){
+						//The array is not a portion, so it returns -1
+						return "-1;"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generatePyArithmeticExpression(exp, scope, local)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
+				} else if ((expression.target.right as ArrayInit).values.get(0) instanceof ArrayValue){ //matrix 2d
+					if(expression.feature.equals("rowCount")){
+						var s = "len("+expression.target.name + ")"
+						return s
+					} else if (expression.feature.equals("colCount")){
+						var s = "len("+expression.target.name + "[0])"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''print('The function setType is ineffective: the matrix has already a type')'''
+					} else if (expression.feature.equals("getPortionDisplacement") || expression.feature.equals("getPortionIndex")){
+						//The matrix is not a portion, so it returns -1
+						return "-1;"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generatePyArithmeticExpression(exp, scope, local)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}	
+				}
+		} else if ( (expression.target instanceof VariableDeclaration &&
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Array"))) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Array")))
+					) { //Array variable					
+					
+					if(expression.feature.equals("length")){
+						var s = "len("+expression.target.name + ")"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //array to string
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''print('The function setType is ineffective: the array in py does not need a type')'''
+					} else if (expression.feature.equals("getPortionDisplacement")){
+						return "__portionDisplacement"
+					} else if (expression.feature.equals("getPortionIndex")){
+						return "__portionIndex"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generatePyArithmeticExpression(exp, scope, local)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
+		} else if ( (expression.target instanceof VariableDeclaration &&
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Matrix"))) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Matrix")))
+					) { //Matrix variable
+					if(expression.feature.equals("rowCount")){
+						var s = "len("+expression.target.name + ")"
+						return s
+					} else if (expression.feature.equals("colCount")){
+						var s = "len("+expression.target.name + "[0])"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''print('The function setType is ineffective: the matrix in nodejs does not need a type')'''
+					} else if (expression.feature.equals("getPortionDisplacement")){
+						return "__portionDisplacement"
+					} else if (expression.feature.equals("getPortionIndex")){
+						return "__portionIndex"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generatePyArithmeticExpression(exp, scope, local)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
 			} 
 		}else{
 			return generatePyArithmeticExpression(expression, scope, local)

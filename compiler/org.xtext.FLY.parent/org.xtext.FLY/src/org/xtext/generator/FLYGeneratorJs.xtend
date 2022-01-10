@@ -236,17 +236,16 @@ class FLYGeneratorJs extends AbstractGenerator {
 			var __AWS = require("aws-sdk");
 			
 				«IF env.equals("aws")»
-			var __sqs = new __AWS.SQS();
-			var __rds = new __AWS.RDS();
-			
+					var __sqs = new __AWS.SQS();
+					var __rds = new __AWS.RDS();
 				«ELSE»
-			__AWS.config.update({
-			    accessKeyId: "dummy",
-			    secretAccessKey: "dummy",
-			    region:"us-east-1",
-			    logger: process.stdout
-			})
-			var __sqs = new __AWS.SQS({endpoint: "http://192.168.0.1:4576"});
+				__AWS.config.update({
+				    accessKeyId: "dummy",
+				    secretAccessKey: "dummy",
+				    region:"us-east-1",
+				    logger: process.stdout
+				})
+				var __sqs = new __AWS.SQS({endpoint: "http://192.168.0.1:4576"});
 				«ENDIF»
 			let __params;
 			let __data;
@@ -268,6 +267,7 @@ class FLYGeneratorJs extends AbstractGenerator {
 			var __nosql = require("mongodb");
 			var __fs = require("fs")
 			var __parse = require("csv-parse");
+			
 			«FOR req: exps.expressions.filter(RequireExpression)»
 			
 			«ENDFOR»
@@ -307,15 +307,23 @@ class FLYGeneratorJs extends AbstractGenerator {
 							var __data_«(exp as VariableDeclaration).name» = await new __dataframe(event.data);
 							var «(exp as VariableDeclaration).name» = __data_«(exp as VariableDeclaration).name».toArray();
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-							var «(exp as VariableDeclaration).name» = event.data[0].myArrayPortion;
+							var __«(exp as VariableDeclaration).name»_length = event.data[0].portionLength;
+							var __portionIndex = event.data[0].portionIndex;
+							var __portionDisplacement = event.data[0].portionDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = event.data[0].portionValues;
+							
+							«(exp as VariableDeclaration).name» = [];
+							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_length; __i++) {
+								«(exp as VariableDeclaration).name»[__i] = __«(exp as VariableDeclaration).name»_values[__i];
+							}
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
-							__«(exp as VariableDeclaration).name»_matrix = event.data[0]
-							__«(exp as VariableDeclaration).name»_rows = event.data[0].rows;
-							__«(exp as VariableDeclaration).name»_cols = event.data[0].cols;
-							submatrixIndex = event.data[0].submatrixIndex;
-							matrixType = event.data[0].matrixType;
-							__«(exp as VariableDeclaration).name»_values = event.data[0].values
-							__index = 0
+							var __«(exp as VariableDeclaration).name»_matrix = event.data[0]
+							var __«(exp as VariableDeclaration).name»_rows = event.data[0].portionRows;
+							var __«(exp as VariableDeclaration).name»_cols = event.data[0].portionCols;
+							var __portionIndex = event.data[0].portionIndex;
+							var __portionDisplacement = event.data[0].portionDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = event.data[0].portionValues;
+							var __index = 0;
 							«(exp as VariableDeclaration).name» = [];
 							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_rows; __i++) {
 								«(exp as VariableDeclaration).name»[__i] = [];
@@ -332,26 +340,31 @@ class FLYGeneratorJs extends AbstractGenerator {
 							var __«(exp as VariableDeclaration).name» = await new __dataframe((req.query.data || (req.body && req.body.data)));
 							var «(exp as VariableDeclaration).name» = __«(exp as VariableDeclaration).name».toArray();
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-							var data = await new __dataframe((req.query.data || (req.body && req.body.data)));
-							var arr_data = (data.toArray())[0];
-													
-							var «(exp as VariableDeclaration).name» = arr_data[0];
-						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
-							var data = await new __dataframe((req.query.data || (req.body && req.body.data)));
-							var arr_data = (data.toArray())[0];
+							var __data = await new Object((req.query.data || (req.body && req.body.data)))[0];
 
-							var __«(exp as VariableDeclaration).name»_rows = arr_data[0];
-							var __«(exp as VariableDeclaration).name»_cols = arr_data[1];
-							var submatrixIndex = arr_data[2];
-							var matrixType = arr_data[3];
-							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[4]);
-							var arr_values = __«(exp as VariableDeclaration).name»_values.toArray();
-							var __index = 0
+							var __«(exp as VariableDeclaration).name»_length = __data.portionLength;
+							var __portionIndex = __data.portionIndex;
+							var __portionDisplacement = __data.portionDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = __data.portionValues;
+							
+							«(exp as VariableDeclaration).name» = [];
+							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_length; __i++) {
+								«(exp as VariableDeclaration).name»[__i] = __«(exp as VariableDeclaration).name»_values[__i];
+							}
+						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
+							var __data = await new Object((req.query.data || (req.body && req.body.data)))[0];
+
+							var __«(exp as VariableDeclaration).name»_rows = __data.portionRows;
+							var __«(exp as VariableDeclaration).name»_cols = __data.portionCols;
+							var __portionIndex = __data.portionIndex;
+							var __portionDisplacement = __data.portionDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = __data.portionValues;
+							var __index = 0;
 							«(exp as VariableDeclaration).name» = [];
 							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_rows; __i++) {
 								«(exp as VariableDeclaration).name»[__i] = [];
 								for (var __j = 0;__j < __«(exp as VariableDeclaration).name»_cols; __j++) {
-									«(exp as VariableDeclaration).name»[__i][__j] = (arr_values[__index])[2];
+									«(exp as VariableDeclaration).name»[__i][__j] = __«(exp as VariableDeclaration).name»_values[__index].value;
 									__index+=1;
 								}
 							}
@@ -428,17 +441,28 @@ class FLYGeneratorJs extends AbstractGenerator {
 			var type_decl =(exp.right as ArrayDefinition).type
 			if((exp.right as ArrayDefinition).indexes.length==1){ //mono-dimensional
 				typeSystem.get(scope).put(exp.name, "Array_"+type_decl)
+				s+='''
+					const «exp.name» = [];
+				'''		
 			}else if((exp.right as ArrayDefinition).indexes.length==2){ //bi-dimensional
 				var col = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(1).value,scope)
 				typeSystem.get(scope).put(exp.name, "Matrix_"+type_decl+"_"+col)
+				s+='''
+					const «exp.name» = [];
+					for(var i_«exp.name»=0; i_«exp.name»<«col»; i_«exp.name»++) {
+					    «exp.name»[i_«exp.name»] = [];
+					    for(var j_«exp.name»=0; j_«exp.name»<«col»; j_«exp.name»++) {
+					        «exp.name»[i_«exp.name»][j_«exp.name»] = undefined;
+					    }
+					}
+				'''	
 			}else if((exp.right as ArrayDefinition).indexes.length==3){ // three-dimentional
 			var col = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(1).value,scope)
 			var dep = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(2).value,scope)
 				typeSystem.get(scope).put(exp.name, "Matrix_"+type_decl+"_"+col+"_"+dep)
+				//TO DO
 			}
-			s+='''
-				const «exp.name» = [];
-			'''					
+			
 		} else if(exp.right instanceof ArrayInit){
 			if(((exp.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
 					((exp.right as ArrayInit).values.get(0) instanceof StringLiteral) ||
@@ -523,13 +547,21 @@ class FLYGeneratorJs extends AbstractGenerator {
 			«IF env.contains("aws")»
 				__data = await __sqs.getQueueUrl({ QueueName: "«exp.target.name»-'${id}'"}).promise();
 				
-				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
 					__params = {
-						MessageBody : JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
-												'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
-												'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
-												'submatrixIndex': submatrixIndex,
-												'matrixType': matrixType}),
+						MessageBody : JSON.stringify({'portionValues': «generateJsArithmeticExpression(exp.expression,scope)», 
+												'portionLength': «generateJsArithmeticExpression(exp.expression,scope)».length,
+												'portionIndex': __portionIndex,
+												'portionDisplacement': __portionDisplacement}),
+						QueueUrl : __data.QueueUrl
+					};
+				«ELSEIF  exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					__params = {
+						MessageBody : JSON.stringify({'portionValues': «generateJsArithmeticExpression(exp.expression,scope)», 
+												'portionRows': «generateJsArithmeticExpression(exp.expression,scope)».length,
+												'portionCols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
+												'portionIndex':  __portionIndex,
+												'portionDisplacement': __portionDisplacement}),
 						QueueUrl : __data.QueueUrl
 					};
 				«ELSE»
@@ -541,17 +573,24 @@ class FLYGeneratorJs extends AbstractGenerator {
 				
 				__data = await __sqs.sendMessage(__params).promise();
 			«ELSEIF env == "azure"»
-				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
-					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
-																	'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
-																	'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
-																	'submatrixIndex': submatrixIndex,
-																	'matrixType': matrixType});
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
+					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify({'portionValues': «generateJsArithmeticExpression(exp.expression,scope)», 
+																	'portionLength': «generateJsArithmeticExpression(exp.expression,scope)».length,
+																	'portionIndex':  __portionIndex,
+																	'portionDisplacement': __portionDisplacement}));
+				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify({'portionValues': «generateJsArithmeticExpression(exp.expression,scope)», 
+																	'portionRows': «generateJsArithmeticExpression(exp.expression,scope)».length,
+																	'portionCols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
+																	'portionIndex':  __portionIndex,
+																	'portionDisplacement': __portionDisplacement}));
 				«ELSE»
 					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»));
 				«ENDIF»
 			«ENDIF»
 			'''
+		} else if (exp instanceof ChannelReceive) {
+			//TODO handle receive things on channel
 		} else if (exp instanceof VariableDeclaration) {
 			if (exp.typeobject.equals("var")) {
 				if (exp.right instanceof NameObjectDef) {
@@ -579,17 +618,27 @@ class FLYGeneratorJs extends AbstractGenerator {
 					var type_decl =(exp.right as ArrayDefinition).type
 					if((exp.right as ArrayDefinition).indexes.length==1){ //mono-dimensional
 						typeSystem.get(scope).put(exp.name, "Array_"+type_decl)
+						s+='''
+							var «exp.name» = [];
+						'''	
 					}else if((exp.right as ArrayDefinition).indexes.length==2){ //bi-dimensional
 						var col = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(1).value,scope)
 						typeSystem.get(scope).put(exp.name, "Matrix_"+type_decl+"_"+col)
+						s+='''
+							var «exp.name» = [];
+							for(var i_«exp.name»=0; i_«exp.name»<«col»; i_«exp.name»++) {
+							    «exp.name»[i_«exp.name»] = [];
+							    for(var j_«exp.name»=0; j_«exp.name»<«col»; j_«exp.name»++) {
+							        «exp.name»[i_«exp.name»][j_«exp.name»] = undefined;
+							    }
+							}
+						'''	
 					}else if((exp.right as ArrayDefinition).indexes.length==3){ // three-dimentional
 					var col = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(1).value,scope)
 					var dep = generateJsArithmeticExpression((exp.right as ArrayDefinition).indexes.get(2).value,scope)
 						typeSystem.get(scope).put(exp.name, "Matrix_"+type_decl+"_"+col+"_"+dep)
-					}
-					s+='''
-						var «exp.name» = [];
-					'''					
+						//TO DO
+					}				
 				}else if(exp.right instanceof ArrayInit){
 						if(((exp.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
 					((exp.right as ArrayInit).values.get(0) instanceof StringLiteral) ||
@@ -1693,10 +1742,11 @@ class FLYGeneratorJs extends AbstractGenerator {
 			if (exp.target.typeobject.equals("var")) {
 				if (exp.feature.equals("split")) {
 					return "String[]"
-				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length")) {
+				} else if (exp.feature.contains("indexOf") || exp.feature.equals("length") || exp.feature.equals("rowCount") || exp.feature.equals("colCount")) {
 					return "Integer"
 				} else if (exp.feature.equals("concat") || exp.feature.equals("substring") ||
-					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase")) {
+					exp.feature.equals("toLowerCase") || exp.feature.equals("toUpperCase")
+					|| exp.feature.equals("deepToString")) {
 					return "String"
 				} else {
 					return "Boolean"
@@ -1875,6 +1925,123 @@ class FLYGeneratorJs extends AbstractGenerator {
 				default :{
 					return generateJsArithmeticExpression(expression, scope)
 				}
+			}
+		}else if (expression.target.right instanceof ArrayInit ){
+								
+			if(((expression.target.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
+					((expression.target.right as ArrayInit).values.get(0) instanceof StringLiteral) ||
+					((expression.target.right as ArrayInit).values.get(0) instanceof FloatLiteral)
+				){ //array mono-dimensional	
+					if(expression.feature.equals("length")){
+						var s = expression.target.name + "." + expression.feature
+						return s
+					} else if (expression.feature.equals("deepToString")){
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''console.log("The function setType is ineffective: the array in nodejs does not need a type")'''
+					} else if (expression.feature.equals("getPortionIndex") || expression.feature.equals("getPortionIndex")){
+						//The array is not a portion, so it returns -1
+						return "-1;"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateJsArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
+				} else if ((expression.target.right as ArrayInit).values.get(0) instanceof ArrayValue){ //matrix 2d
+					if(expression.feature.equals("rowCount")){ //num of rows
+						var s = expression.target.name + ".length"
+						return s
+					} else if (expression.feature.equals("colCount")){ //num of cols
+						var s = expression.target.name + "[0].length"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''console.log("The function setType is ineffective: the matrix in nodejs does not need a type")'''
+					} else if (expression.feature.equals("getPortionDisplacement") || expression.feature.equals("getPortionIndex")){
+						//The matrix is not a portion, so it returns -1
+						return "-1;"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateJsArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}	
+				}
+				
+		} else if ( (expression.target instanceof VariableDeclaration &&
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Array"))) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Array")))
+					) { //Array variable					
+					
+					if(expression.feature.equals("length")){
+						var s = expression.target.name + "." + expression.feature
+						return s
+					} else if (expression.feature.equals("deepToString")){ //array to string
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''console.log("The function setType is ineffective: the array in nodejs does not need a type")'''
+					} else if (expression.feature.equals("getPortionDisplacement")){
+						return "__portionDisplacement"
+					} else if (expression.feature.equals("getPortionIndex")){
+						return "__portionIndex"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateJsArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
+		} else if ( (expression.target instanceof VariableDeclaration &&
+				(typeSystem.get(scope).get((expression.target as VariableDeclaration).name).contains("Matrix"))) ||
+					(expression.target instanceof ConstantDeclaration &&
+				(typeSystem.get(scope).get((expression.target as ConstantDeclaration).name).contains("Matrix")))
+					) { //Matrix variable
+					if(expression.feature.equals("rowCount")){
+						var s = expression.target.name + ".length"
+						return s
+					} else if (expression.feature.equals("colCount")){
+						var s = expression.target.name + "[0].length"
+						return s
+					} else if (expression.feature.equals("deepToString")){ //matrix to string
+						var s = expression.target.name
+						return s
+					} else if (expression.feature.equals("setType")){
+						return  '''console.log("The function setType is ineffective: the matrix in nodejs does not need a type")'''					
+					} else if (expression.feature.equals("getPortionDisplacement")){
+						return "__portionDisplacement"
+					} else if (expression.feature.equals("getPortionIndex")){
+						return "__portionIndex"
+					} else {
+						var s = expression.target.name + "." + expression.feature + "("
+						for (exp : expression.expressions) {
+							s += generateJsArithmeticExpression(exp, scope)
+							if (exp != expression.expressions.last()) {
+								s += ","
+							}
+						}
+						s += ")"
+						return s
+					}
 			} 
 		}else{
 			return generateJsArithmeticExpression(expression, scope)
