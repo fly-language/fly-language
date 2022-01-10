@@ -384,21 +384,17 @@ class FLYGeneratorPython extends AbstractGenerator {
 			«ELSEIF env=="azure"»
 				__queue_service_client = __queue_service.get_queue_client('«exp.target.name»-"${id}"')
 				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
-					__queue_service_client.send_message(json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
-											'length': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
-											«IF !root.parameters.empty»
-												'subarrayIndex': subarrayIndex,
-											«ENDIF»
-											'arrayType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0].__class__.__name__})
+					__queue_service_client.send_message(json.dumps({'portionValues': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+											'portionLength': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+											'portionIndex': __portionIndex,
+											'portionDisplacement': __portionDisplacement})
 										)
 				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
-					__queue_service_client.send_message(json.dumps({'values': «generatePyArithmeticExpression(exp.expression, scope, local)», 
-											'rows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
-											'cols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
-											«IF !root.parameters.empty»
-												'submatrixIndex': submatrixIndex,
-											«ENDIF»
-											'matrixType': «generatePyArithmeticExpression(exp.expression, scope, local)»[0][0].__class__.__name__})
+					__queue_service_client.send_message(json.dumps({'portionValues': «generatePyArithmeticExpression(exp.expression, scope, local)», 
+											'portionRows': len(«generatePyArithmeticExpression(exp.expression, scope, local)»),
+											'portionCols': len(«generatePyArithmeticExpression(exp.expression, scope, local)»[0]),
+											'portionIndex': __portionIndex,
+											'portionDisplacement': __portionDisplacement})
 										)
 				«ELSE»
 					__queue_service_client.send_message(«generatePyArithmeticExpression(exp.expression, scope, local)»)

@@ -214,7 +214,8 @@ class FLYGenerator extends AbstractGenerator {
 	import java.util.Iterator;
 	import org.json.JSONObject;
 	import org.json.JSONArray;
-	
+	import com.microsoft.azure.storage.StorageException;
+	import java.net.URISyntaxException;
 
 	«IF checkAzure()»
 	import isislab.azureclient.AzureClient;
@@ -271,7 +272,7 @@ class FLYGenerator extends AbstractGenerator {
 			static boolean __wait_on_termination_«element.target.name»_«termination_init_counter++» = true;
 		«ENDFOR»
 				
-		public static void main(String[] args){
+		public static void main(String[] args) throws URISyntaxException, StorageException{
 			«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
 				«initialiseConstant(element,"main")»
 			«ENDFOR»
@@ -332,7 +333,7 @@ class FLYGenerator extends AbstractGenerator {
 		
 		private static String __generateString(String s,int id) {
 			StringBuilder b = new StringBuilder();
-			b.append("{\"id\":"+id+",\"data\":");
+			b.append("{\"id\":\""+id+"\",\"data\":");
 			b.append("[");
 			String[] tmp = s.split("\n");
 			for(String t: tmp){
@@ -481,7 +482,7 @@ class FLYGenerator extends AbstractGenerator {
 			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
 			filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
 				«IF ((element.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
-						«element.environment.get(0).name».setupQueue("«element.name»-"+__id_execution);	
+						«element.environment.get(0).name».createQueue("«element.name»-"+__id_execution);	
 				«ENDIF»
 			«ENDFOR»
 
@@ -798,8 +799,7 @@ class FLYGenerator extends AbstractGenerator {
 		static HashMap<String,HashMap<String,Integer>> __fly_async_invocation_id = new HashMap<String,HashMap<String,Integer>>();
 		static final String __environment = "smp";
 		static long  __id_execution =  System.currentTimeMillis();
-		static Integer subIndex_«id_execution» = -1;
-		static Integer displ_«id_execution» = -1;
+
 		«FOR element : (resource.allContents.toIterable.filter(Expression))»
 			«IF element instanceof VariableDeclaration»
 				«IF element.right instanceof DeclarationObject 
@@ -942,7 +942,7 @@ class FLYGenerator extends AbstractGenerator {
 		
 		private static String __generateString(String s,int id) {
 			StringBuilder b = new StringBuilder();
-			b.append("{\"id\":"+id+",\"data\":");
+			b.append("{\"id\":\""+id+"\",\"data\":");
 			b.append("[");
 			String[] tmp = s.split("\n");
 			for(String t: tmp){
@@ -2105,10 +2105,12 @@ class FLYGenerator extends AbstractGenerator {
 								typeSystem.get(scope).put(dec.name,"Array_Object")
 								return '''
 									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
-									«IF ((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure"))»
-										byte[] decodedBytes = Base64.getDecoder().decode(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
-										__res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = new String(decodedBytes);
-									«ENDIF»
+									__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»= __res_«((dec.right as CastExpression).target as ChannelReceive).target.name».replace("&amp;","&")
+										    .replace("&lt;", "<")
+										    .replace("&gt;", ">")
+										    .replace("&quot;", "\"")
+										    .replace("&apos;", "\'");
+														    
 									JSONObject __jsonObject = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
 																		
 									int __arr_length = __jsonObject.getInt("portionLength");
@@ -2124,10 +2126,11 @@ class FLYGenerator extends AbstractGenerator {
 								typeSystem.get(scope).put(dec.name,"Matrix_Object")
 								return '''
 									String __res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = «((dec.right as CastExpression).target as ChannelReceive).target.name».take().toString();
-									«IF ((((dec.right as CastExpression).target as ChannelReceive).target.environment.get(0).right as DeclarationObject).features.get(0).value_s.contains("azure"))»
-										byte[] decodedBytes = Base64.getDecoder().decode(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
-										__res_«((dec.right as CastExpression).target as ChannelReceive).target.name» = new String(decodedBytes);
-									«ENDIF»
+									__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»= __res_«((dec.right as CastExpression).target as ChannelReceive).target.name».replace("&amp;","&")
+										    .replace("&lt;", "<")
+										    .replace("&gt;", ">")
+										    .replace("&quot;", "\"")
+										    .replace("&apos;", "\'");
 									JSONObject __jsonObject = new JSONObject(__res_«((dec.right as CastExpression).target as ChannelReceive).target.name»);
 									
 									int __n_rows = __jsonObject.getInt("portionRows");
@@ -3396,7 +3399,6 @@ class FLYGenerator extends AbstractGenerator {
 									__termination_«call.target.name»_«func_termination_counter»);
 				
 				«clusterEnvName».VMClusterInit();
-				«clusterEnvName».setupQueue(__termination_«call.target.name»_«func_termination_counter»);
 			«ENDIF»
 						
 			«FOR element: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
@@ -4604,7 +4606,6 @@ class FLYGenerator extends AbstractGenerator {
 	
 	
 	def generateAzureFlyFunctionCall(FlyFunctionCall call, String scope) {
-		// generate the aws lambda function
 		var async = call.isIsAsync
 		var cred = call.environment.name
 		var region = ((call.environment.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s
@@ -4742,22 +4743,38 @@ class FLYGenerator extends AbstractGenerator {
 					ret+='''
 						int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«cred»").get("nthread");
 						ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-						int __arr_length = «(call.input.f_index as VariableLiteral).variable.name».length;
 						
-						int[] dimPortions = new int[__num_proc_«call.target.name»_«func_ID»]; 
-						int[] displ = new int[__num_proc_«call.target.name»_«func_ID»]; 
-						int offset = 0;
+						int __arr_length_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+						
+						if ( __arr_length_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __arr_length_«func_ID»;						
+						
+						int[] dimPortions_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+						int[] displ_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+						int offset_«func_ID» = 0;
 						
 						for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-							dimPortions[__i] = (__arr_length / __num_proc_«call.target.name»_«func_ID») +
-								((__i < (__arr_length % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
-							displ[__i] = offset;								
-							offset += dimPortions[__i];
+							dimPortions_«func_ID»[__i] = (__arr_length_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+								((__i < (__arr_length_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
+							displ_«func_ID»[__i] = offset_«func_ID»;								
+							offset_«func_ID» += dimPortions_«func_ID»[__i];
 
 							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-							String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ[__i], displ[__i]+dimPortions[__i] ));
-							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"myArrayPortion\":"+myArrayPortionString+"}");
+						«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+							String[] arrayPortion = Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[__i], displ_«func_ID»[__i]+dimPortions_«func_ID»[__i]);
+							String myArrayPortionString = "[";
+							for (int x=0; x < arrayPortion.length; x++) {
+								if ( x < arrayPortion.length-1){
+									myArrayPortionString += "\""+arrayPortion[x]+"\",";
+								}else{
+									myArrayPortionString += "\""+arrayPortion[x]+"\"]";
+								 }
+							}
+						«ELSE»
+							String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[__i], displ_«func_ID»[__i]+dimPortions_«func_ID»[__i] ));
+						«ENDIF»
+							__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionLength\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":"+myArrayPortionString+"}");						
 						}
+						
 						for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 							final int __i_f = __i;
 							Future<Object> f = __thread_pool_«call.environment.name».submit(new Callable<Object>() {
@@ -4775,29 +4792,43 @@ class FLYGenerator extends AbstractGenerator {
 					'''	
 			}else if(call.input.f_index instanceof VariableLiteral &&
 				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix")){
-					if(call.input.split.equals("row")){ //row
+					if(call.input.split.equals("row")){ 
 						ret+='''
 							int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«cred»").get("nthread");
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-							int __current_row_«(call.input.f_index as VariableLiteral).variable.name» = 0;
+							
+							int __current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = 0;
+							
+							int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
 							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+							
+							if ( __rows_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __rows_«func_ID»;
+							
+							int[] dimPortions_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+							int[] displ_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+							int offset_«func_ID» = 0;
+							
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-								int __n_rows =  __rows_«func_ID»/__num_proc_«call.target.name»_«func_ID»;
-								if(__rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __rows_«func_ID»%__num_proc_«call.target.name»_«func_ID» ){
-									__n_rows++;
-								}
+								dimPortions_«func_ID»[__i] = (__rows_«func_ID» / __num_proc_«call.target.name»_«func_ID») + ((__i < (__rows_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
+								displ_«func_ID»[__i] = offset_«func_ID»;								
+								offset_«func_ID» += dimPortions_«func_ID»[__i];
+								
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__n_rows+",\"cols\":"+«(call.input.f_index as VariableLiteral).variable.name»[0].length+",\"submatrixIndex\":"+__i+",\"values\":[");
-								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»+__n_rows;__j++){
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionRows\":"+dimPortions_«func_ID»[__i]+",\"portionCols\":"+__cols_«func_ID»+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":[");
+								for(int __j=__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»; __j<__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+dimPortions_«func_ID»[__i];__j++){
 									for(int __z = 0; __z<«(call.input.f_index as VariableLiteral).variable.name»[__j].length;__z++){
-										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+										«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":\""+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"\"},");
+										«ELSE»
+											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+										«ENDIF»
 									}
-									if(__j == __current_row_«(call.input.f_index as VariableLiteral).variable.name» + __n_rows-1) {
+									if(__j == __current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» + dimPortions_«func_ID»[__i]-1) {
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("]}");
 									}
 								}
-								__current_row_«(call.input.f_index as VariableLiteral).variable.name»+=__n_rows;
+								__current_row_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» +=dimPortions_«func_ID»[__i];
 							}
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 									final int __i_f = __i;
@@ -4814,32 +4845,47 @@ class FLYGenerator extends AbstractGenerator {
 								__sync_list_«call.target.name»_«func_ID».add(f);
 								}
 						'''
-					}else if(call.input.split.equals("col")){ //col
+					}else if(call.input.split.equals("col")){ 
 						ret+='''
 							int __num_proc_«call.target.name»_«func_ID»= (int) __fly_environment.get("«call.environment.name»").get("nthread");
 							ArrayList<StringBuilder> __temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = new ArrayList<StringBuilder>();
-							int __current_col_«(call.input.f_index as VariableLiteral).variable.name» = 0;
-							int __cols = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
-							int __rows = «(call.input.f_index as VariableLiteral).variable.name».length;
+							
+							int __current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID» = 0;
+							
+							int __cols_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name»[0].length;
+							int __rows_«func_ID» = «(call.input.f_index as VariableLiteral).variable.name».length;
+							
+							if ( __cols_«func_ID» < __num_proc_«call.target.name»_«func_ID») __num_proc_«call.target.name»_«func_ID» = __cols_«func_ID»;
+							
+							int[] dimPortions_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+							int[] displ_«func_ID» = new int[__num_proc_«call.target.name»_«func_ID»]; 
+							int offset_«func_ID» = 0;
 							
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
-								int __n_cols =  __cols/__num_proc_«call.target.name»_«func_ID»;
-								if(__cols%__num_proc_«call.target.name»_«func_ID» !=0 && __i< __cols%__num_proc_«call.target.name»_«func_ID» ){
-									__n_cols++;
-								}
+								dimPortions_«func_ID»[__i] = (__cols_«func_ID» / __num_proc_«call.target.name»_«func_ID») +
+																		((__i < (__cols_«func_ID» % __num_proc_«call.target.name»_«func_ID»)) ? 1 : 0);
+								displ_«func_ID»[__i] = offset_«func_ID»;
+								offset_«func_ID» += dimPortions_«func_ID»[__i];
+
 								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».add(__i,new StringBuilder());
-								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"rows\":"+__rows+",\"cols\":"+__n_cols+",\"submatrixIndex\":"+__i+",\"values\":[");
-								for(int __j = 0; __j<__rows;__j++){
-									for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»+__n_cols;__z++){
-										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+								__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionRows\":"+__rows_«func_ID»+",\"portionCols\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":[");							
+																	
+								for(int __j = 0; __j<__rows_«func_ID»;__j++){
+									for(int __z=__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»; __z<__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+dimPortions_«func_ID»[__i];__z++){
+										«IF (typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("String"))»
+											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":\""+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"\"},");
+										«ELSE»
+											__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"x\":"+__j+",\"y\":"+__z+",\"value\":"+«(call.input.f_index as VariableLiteral).variable.name»[__j][__z]+"},");
+										«ENDIF»
 									}
-									if(__j == __rows-1) {
+									if(__j == __rows_«func_ID»-1) {
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).deleteCharAt(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).length()-1);
 										__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("]}");
 									}
 								}
-								__current_col_«(call.input.f_index as VariableLiteral).variable.name»+=__n_cols;
+								__current_col_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID»+=dimPortions_«func_ID»[__i];
 							}
+							
 							for(int __i=0;__i<__num_proc_«call.target.name»_«func_ID»;__i++){
 									final int __i_f = __i;
 									Future<Object> f = __thread_pool_«call.environment.name».submit(new Callable<Object>() {

@@ -283,33 +283,31 @@ class FLYGeneratorJs extends AbstractGenerator {
 							var __«(exp as VariableDeclaration).name» = await new __dataframe((req.query.data || (req.body && req.body.data)));
 							var «(exp as VariableDeclaration).name» = __«(exp as VariableDeclaration).name».toArray();
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Array")»
-							var data = await new __dataframe((req.query.data || (req.body && req.body.data)));
-							var arr_data = (data.toArray())[0];
+							var __data = await new Object((req.query.data || (req.body && req.body.data)))[0];
+
+							var __«(exp as VariableDeclaration).name»_length = __data.portionLength;
+							var __portionIndex = __data.portionIndex;
+							var __portionDisplacement = __data.portionDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = __data.portionValues;
 							
-							var __«(exp as VariableDeclaration).name»_length = arr_data[0];
-							var subarrayIndex = arr_data[1];
-							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[3]);
-							var arr_values = __«(exp as VariableDeclaration).name»_values.toArray();
-							var __index = 0
 							«(exp as VariableDeclaration).name» = [];
 							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_length; __i++) {
-								«(exp as VariableDeclaration).name»[__i] = arr_values[__i];
+								«(exp as VariableDeclaration).name»[__i] = __«(exp as VariableDeclaration).name»_values[__i];
 							}
 						«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
-							var data = await new __dataframe((req.query.data || (req.body && req.body.data)));
-							var arr_data = (data.toArray())[0];
+							var __data = await new Object((req.query.data || (req.body && req.body.data)))[0];
 
-							var __«(exp as VariableDeclaration).name»_rows = arr_data[0];
-							var __«(exp as VariableDeclaration).name»_cols = arr_data[1];
-							var submatrixIndex = arr_data[2];
-							var __«(exp as VariableDeclaration).name»_values = await new __dataframe(arr_data[4]);
-							var arr_values = __«(exp as VariableDeclaration).name»_values.toArray();
-							var __index = 0
+							var __«(exp as VariableDeclaration).name»_rows = __data.portionRows;
+							var __«(exp as VariableDeclaration).name»_cols = __data.portionCols;
+							var __portionIndex = __data.portionIndex;
+							var __portionDisplacement = __data.portionDisplacement;
+							var __«(exp as VariableDeclaration).name»_values = __data.portionValues;
+							var __index = 0;
 							«(exp as VariableDeclaration).name» = [];
 							for (var __i = 0;__i < __«(exp as VariableDeclaration).name»_rows; __i++) {
 								«(exp as VariableDeclaration).name»[__i] = [];
 								for (var __j = 0;__j < __«(exp as VariableDeclaration).name»_cols; __j++) {
-									«(exp as VariableDeclaration).name»[__i][__j] = (arr_values[__index])[2];
+									«(exp as VariableDeclaration).name»[__i][__j] = __«(exp as VariableDeclaration).name»_values[__index].value;
 									__index+=1;
 								}
 							}
@@ -511,12 +509,17 @@ class FLYGeneratorJs extends AbstractGenerator {
 				
 				__data = await __sqs.sendMessage(__params).promise();
 			«ELSEIF env == "azure"»
-				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
-					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify({'values': «generateJsArithmeticExpression(exp.expression,scope)», 
-																	'rows': «generateJsArithmeticExpression(exp.expression,scope)».length,
-																	'cols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
-																	'submatrixIndex': submatrixIndex,
-																	'matrixType': typeof «generateJsArithmeticExpression(exp.expression,scope)»[0][0]});
+				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
+					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify({'portionValues': «generateJsArithmeticExpression(exp.expression,scope)», 
+																	'portionLength': «generateJsArithmeticExpression(exp.expression,scope)».length,
+																	'portionIndex':  __portionIndex,
+																	'portionDisplacement': __portionDisplacement}));
+				«ELSEIF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Matrix")»
+					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify({'portionValues': «generateJsArithmeticExpression(exp.expression,scope)», 
+																	'portionRows': «generateJsArithmeticExpression(exp.expression,scope)».length,
+																	'portionCols': «generateJsArithmeticExpression(exp.expression,scope)»[0].length,
+																	'portionIndex':  __portionIndex,
+																	'portionDisplacement': __portionDisplacement}));
 				«ELSE»
 					await (__util.promisify(__queueSvc.createMessage).bind(__queueSvc))("«exp.target.name»-'${id}'", JSON.stringify(«generateJsArithmeticExpression(exp.expression,scope)»));
 				«ENDIF»
