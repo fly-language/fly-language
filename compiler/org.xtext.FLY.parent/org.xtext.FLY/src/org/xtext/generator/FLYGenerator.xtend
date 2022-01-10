@@ -88,8 +88,7 @@ class FLYGenerator extends AbstractGenerator {
 	var func_undeploy_counter = -1
 	var func_termination_counter = 0
 	var termination_counter = 0
-	var right_env = ""
-	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure","vm-cluster","k8s"));
+	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure","vm-cluster"));
 	Resource res = null
 
 	override void doGenerate(Resource resource, IFileSystemAccess2 fsa, IGeneratorContext context) {
@@ -104,43 +103,19 @@ class FLYGenerator extends AbstractGenerator {
 			for (element : resource.allContents.toIterable.filter(FlyFunctionCall)) {
 				var type_env = ((element.environment.right as DeclarationObject).features.get(0) as DeclarationFeature).value_s;
 				var async = element.isAsync;
-				if (type_env.equals("k8s")){
-					var language = ""
-					right_env = ((element.environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s
-							if(right_env.contains("azure")){
-							language = ((element.environment.environment.get(0).right as DeclarationObject).features.get(6) as DeclarationFeature).value_s
-							
-							}
-							else if(right_env.contains("aws")){
-							language = ((element.environment.environment.get(0).right as DeclarationObject).features.get(5) as DeclarationFeature).value_s
-								
-							}
-							else{
-							language = ((element.environment.environment.get(0).right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
-							
-							}
-						    if (language.contains("python")){
-						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async,true); 
-					}else if (language.contains("nodejs")) {
-						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async,true);
-					}
-									//Generate .java files (Kubernetes)
-					fsa.generateFile(name + ".java", resource.compileJavaForK8s)
-					return
-				}
-				else if(type_env.equals("smp") && ((element.environment.right as DeclarationObject).features.length==3)){
+				if(type_env.equals("smp") && ((element.environment.right as DeclarationObject).features.length==3)){
 					// generate .java file (local)
 					fsa.generateFile(name + ".java", resource.compileJava)
 					if(((element.environment.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s.contains("python")){
-						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,true,async,true);
+						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,true,async);
 					}else{
-						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,true,async,true);
+						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,true,async);
 					}	
 				}else if(type_env.equals("smp")){
 					// generate .java file (local)
 					fsa.generateFile(name + ".java", resource.compileJava)
 				}
-				else if ( (type_env != "smp") && (type_env != "vm-cluster")) {
+				if ( (type_env != "smp") && (type_env != "vm-cluster")) {
 					// generate .java file (serverless)
 					fsa.generateFile(name + ".java", resource.compileJava)
 					var language =""
@@ -156,13 +131,13 @@ class FLYGenerator extends AbstractGenerator {
 						case "azure":{
 							language = ((element.environment.right as DeclarationObject).features.get(6) as DeclarationFeature).value_s;
 							
-						}			
+						}
 					}
 					
 					if (language.contains("python")){
-						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async,true); 
+						pyGen.generatePython(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async); 
 					}else if (language.contains("nodejs")) {
-						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async,true);
+						jsGen.generateJS(resource,fsa,context,name,element.target,element.environment,typeSystem,id_execution,false,async);
 					}
 				}
 				if(type_env.equals("vm-cluster")){
@@ -537,352 +512,6 @@ class FLYGenerator extends AbstractGenerator {
 		«ENDFOR»
 	}
 	'''
-		
-	def CharSequence compileJavaForK8s(Resource resource) '''
-	import java.io.File;
-	import java.io.FileInputStream;
-	import java.io.InputStreamReader;
-	import java.io.FileOutputStream;
-	import java.io.OutputStreamWriter;
-	import java.io.IOException;
-	import java.nio.ByteBuffer;
-	import java.nio.channels.FileChannel;
-	import java.nio.file.StandardOpenOption;
-	import java.io.InputStream;
-	import java.net.ServerSocket;
-	import java.net.Socket;
-	import java.io.BufferedReader;
-	import java.util.ArrayList;
-	import java.util.Arrays;
-	import java.util.List;
-	import java.util.zip.ZipEntry;
-	import java.util.zip.ZipOutputStream;
-	import java.io.BufferedWriter;
-	import java.io.FileWriter;
-	import java.io.IOException;
-	import java.util.HashMap;
-	import java.time.LocalDate;
-	import tech.tablesaw.api.Table;
-	import tech.tablesaw.io.csv.CsvReadOptions;
-	import tech.tablesaw.io.csv.CsvWriteOptions;
-	import tech.tablesaw.columns.Column;
-	import tech.tablesaw.selection.Selection;
-	import tech.tablesaw.table.Rows;
-	import tech.tablesaw.api.Row;
-	import java.util.concurrent.LinkedTransferQueue;
-	import java.util.concurrent.ExecutorService;
-	import java.util.concurrent.Executors;
-	import java.util.concurrent.ExecutionException;
-	import java.util.ArrayList;
-	import java.util.List;
-	import java.util.concurrent.Callable;
-	import java.util.concurrent.Future;
-	import java.util.concurrent.atomic.AtomicInteger;
-	import java.util.Random;
-	import java.util.Collections;
-	import java.util.Comparator;
-	import java.util.Map;
-	import java.util.Scanner;
-	import org.apache.commons.io.FileUtils;
-	import org.apache.commons.io.FileUtils;
-	import java.sql.*;
-		«IF checkAWS() || checkAWSDebug()»
-	import com.amazonaws.AmazonClientException;
-	import com.amazonaws.auth.AWSStaticCredentialsProvider;
-	import com.amazonaws.auth.BasicAWSCredentials;
-	import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-	import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
-	import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
-	import com.amazonaws.services.identitymanagement.model.CreateRoleRequest;
-	import com.amazonaws.services.identitymanagement.model.CreateRoleResult;
-	import com.amazonaws.services.identitymanagement.model.DeleteRolePolicyRequest;
-	import com.amazonaws.services.identitymanagement.model.DeleteRoleRequest;
-	import com.amazonaws.services.identitymanagement.model.PutRolePolicyRequest;
-	import com.amazonaws.services.lambda.AWSLambda;
-	import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
-	import com.amazonaws.services.lambda.model.AddPermissionRequest;
-	import com.amazonaws.services.lambda.model.AddPermissionResult;
-	import com.amazonaws.services.lambda.model.CreateFunctionRequest;
-	import com.amazonaws.services.lambda.model.CreateFunctionResult;
-	import com.amazonaws.services.lambda.model.DeleteFunctionRequest;
-	import com.amazonaws.services.lambda.model.FunctionCode;
-	import com.amazonaws.services.lambda.model.InvokeRequest;
-	import com.amazonaws.services.sqs.AmazonSQS;
-	import com.amazonaws.services.sqs.model.Message;
-	import com.amazonaws.services.sqs.AmazonSQSClient;
-	import com.amazonaws.services.sqs.model.CreateQueueRequest;
-	import com.amazonaws.services.sqs.model.CreateQueueResult;
-	import com.amazonaws.services.sqs.model.ReceiveMessageRequest;
-	import com.amazonaws.services.sqs.model.ReceiveMessageResult;
-	import com.amazonaws.services.sqs.model.SendMessageRequest;
-	import com.amazonaws.services.sqs.model.AmazonSQSException;
-	import com.amazonaws.services.sqs.model.GetQueueAttributesRequest;
-	import com.amazonaws.services.sqs.model.GetQueueUrlResult;
-	import com.amazonaws.services.sqs.model.DeleteQueueRequest;
-	import com.amazonaws.services.identitymanagement.model.GetRoleRequest;
-	import com.amazonaws.services.identitymanagement.model.GetRoleResult;
-	import com.amazonaws.services.s3.AmazonS3;
-	import com.amazonaws.services.s3.AmazonS3Client;
-	import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-	import com.amazonaws.services.s3.model.AmazonS3Exception;
-	import com.amazonaws.services.s3.model.Bucket;
-	import com.amazonaws.services.s3.model.CannedAccessControlList;
-	import com.amazonaws.services.s3.model.PutObjectRequest;
-	import com.amazonaws.services.s3.model.ListObjectsV2Result;
-	import com.amazonaws.services.s3.model.PutObjectRequest;
-	import com.amazonaws.services.s3.model.S3ObjectSummary;
-	import com.amazonaws.services.rds.AmazonRDS;
-	import com.amazonaws.services.rds.AmazonRDSClient;
-	import com.amazonaws.services.rds.model.DBInstance;
-	import com.amazonaws.services.rds.model.DescribeDBInstancesRequest;
-	import com.amazonaws.services.rds.model.DescribeDBInstancesResult;
-	import com.amazonaws.services.rds.model.Endpoint;
-
-		«ENDIF»
-		«IF checkAWSDebug()»
-	import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
-		«ENDIF»
-	import com.google.gson.Gson;
-	import com.google.gson.reflect.TypeToken;
-		«IF checkAzure()»
-	import com.microsoft.azure.management.resources.fluentcore.arm.Region;
-	import isislab.azureclient.AzureClient;
-		«ENDIF»
-		«IF isK8s()»
-	import redis.clients.jedis.*;
-		«ENDIF»
-		
-		public class «name» {
-			
-			static HashMap<String,HashMap<String, Object>> __fly_environment = new HashMap<String,HashMap<String,Object>>();
-			static HashMap<String,HashMap<String,Integer>> __fly_async_invocation_id = new HashMap<String,HashMap<String,Integer>>();
-			static final String __environment = "smp";
-			static long  __id_execution =  System.currentTimeMillis();
-			static LinkedTransferQueue<Object> ch = new LinkedTransferQueue<Object>();
-		
-			«FOR element : resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-				static boolean __wait_on_termination_«element.target.name» = true;
-			«ENDFOR»
-			
-			public static void main(String[] args) throws Exception{
-				«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
-					«initialiseConstant(element,"main")»
-				«ENDFOR»
-				«IF checkAWSDebug()»
-				Runtime.getRuntime().exec("chmod +x src-gen/docker-compose-script.sh");
-				ProcessBuilder __processBuilder_docker_compose = new ProcessBuilder("/bin/bash", "-c", "src-gen/docker-compose-script.sh");
-				Map<String, String> __env_docker_compose = __processBuilder_docker_compose.environment();
-				String __path_env_docker_compose = __env_docker_compose.get("PATH");
-				if (!__path_env_docker_compose.contains("/usr/local/bin")) {
-					 __env_docker_compose.put("PATH", __path_env_docker_compose+":/usr/local/bin");
-				}
-				Process __p_docker_compose;
-				try {
-					__p_docker_compose = __processBuilder_docker_compose.start();
-					BufferedReader __p_docker_compose_output = new BufferedReader(new InputStreamReader(__p_docker_compose.getInputStream()));
-					String __docker_compose_output_line = __p_docker_compose_output.readLine();
-					while(__docker_compose_output_line !=null) {
-						System.out.println(__docker_compose_output_line);
-						if (__docker_compose_output_line.contains("Ready."))
-							break;
-						__docker_compose_output_line=__p_docker_compose_output.readLine();
-					}
-				} catch (Exception e) {
-					e.printStackTrace();
-				}		
-				«ENDIF»
-				
-				«IF isK8s()»
-				Runtime.getRuntime().exec("chmod +x src-gen/kubernetes_deploy.sh");
-								ProcessBuilder __processBuilder_kubernetes_deployer = new ProcessBuilder("/bin/bash", "-c", "src-gen/kubernetes_deploy.sh");
-								Map<String, String> __env_kubernetes_deployer = __processBuilder_kubernetes_deployer.environment();
-								String __path_env_kubernetes_deployer = __env_kubernetes_deployer.get("PATH");
-								if (!__path_env_kubernetes_deployer.contains("/usr/local/bin")) {
-									 __env_kubernetes_deployer.put("PATH", __path_env_kubernetes_deployer+":/usr/local/bin");
-								}
-								Process __p_kubernetes_deployer;
-								try {
-									__p_kubernetes_deployer = __processBuilder_kubernetes_deployer.start();
-									BufferedReader __p_kubernetes_deployer_output = new BufferedReader(new InputStreamReader(__p_kubernetes_deployer.getInputStream()));
-									String __kubernetes_deployer_output_line = __p_kubernetes_deployer_output.readLine();
-									while(__kubernetes_deployer_output_line !=null) {
-										System.out.println(__kubernetes_deployer_output_line);
-										__kubernetes_deployer_output_line=__p_kubernetes_deployer_output.readLine();
-									}
-								} catch (Exception e) {
-									e.printStackTrace();
-								}
-								StringBuilder svcIP = new StringBuilder();
-								ProcessBuilder processBuilder = new ProcessBuilder();
-															«IF (right_env != "smp")»
-													        processBuilder.command("bash", "-c", "kubectl get service/public-svc -o jsonpath='{.status.loadBalancer.ingress[*].ip}'");
-													        «ELSE»
-													        processBuilder.command("bash", "-c", "minikube ip");
-													        «ENDIF»
-													        try {
-													
-													            Process process = processBuilder.start();
-													
-													
-													            BufferedReader reader = new BufferedReader(
-													                    new InputStreamReader(process.getInputStream()));
-													
-													            String line;
-													            while ((line = reader.readLine()) != null) {
-													                svcIP.append(line);
-													            }
-													
-													            int exitVal = process.waitFor();
-													            if (exitVal == 0) {
-													                System.out.println("Success!");
-													                System.out.println("The service IP exposed is: " + svcIP);
-													            } else {
-													                //abnormal...
-													            }
-													
-													        } catch (IOException e) {
-													            e.printStackTrace();
-													        } catch (InterruptedException e) {
-													            e.printStackTrace();
-													        }
-													        							        		
-				«FOR element : resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]»
-					«setEnvironmentDeclarationInfo(element)»
-				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-					«IF !(element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp")»
-					«generateChanelDeclarationForCloud(element)»
-					«ELSEIF (element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp") &&
-						(element.environment.get(0).right as DeclarationObject).features.length==3»
-						«generateChannelDeclarationForLanguage(element)»
-					«ENDIF»
-				«ENDFOR»
-			«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
-				«IF checkBlock(element.eContainer)==false»
-					«generateFunctionDefinition(element)»
-				«ENDIF»	
-			«ENDFOR»															
-			«ELSE»	
-				«FOR element : resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]»
-					«setEnvironmentDeclarationInfo(element)»
-				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-					&& !((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
-					ExecutorService __thread_pool_«element.name» = Executors.newFixedThreadPool((int) __fly_environment.get("«resource.allContents.toIterable.filter(VariableDeclaration)
-					.filter[right instanceof DeclarationObject].filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))].get(0).name»").get("nthread"));
-				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
-					«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
-						"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
-						"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
-						"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
-						__id_execution+"",
-						"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»");
-					«element.name».init();
-					«element.name».createFunctionApp("flyapp«element.name»","«(element.right as DeclarationObject).features.get(6).value_s»");
-				«ENDFOR»
-				«IF resource.allContents.toIterable.filter(FlyFunctionCall)
-				.filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")].length > 0»
-					ExecutorService __thread_pool_deploy_on_cloud = Executors.newFixedThreadPool((int) __fly_environment.get("«resource.allContents.toIterable.filter(VariableDeclaration)
-					.filter[right instanceof DeclarationObject].filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))].get(0).name»").get("nthread"));	
-					ArrayList<Future<Object>> __termination_deploy_on_cloud = new ArrayList();		
-					«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall)
-					.filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp")]»
-						«deployFlyFunctionOnCloud(element)»
-					«ENDFOR»
-					for (Future<Object> f: __termination_deploy_on_cloud){
-						try {
-							f.get();
-						} catch (InterruptedException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						} catch (ExecutionException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-					System.out.println("Deploy effettuato");
-				«ENDIF»
-				
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
-				filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
-					«IF !(element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp")»
-					«generateChanelDeclarationForCloud(element)»
-					«ELSEIF (element.environment.get(0).right as DeclarationObject).features.get(0).equals("smp") &&
-						(element.environment.get(0).right as DeclarationObject).features.length==3»
-						«generateChannelDeclarationForLanguage(element)»
-					«ENDIF»
-				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[!(environment.right as DeclarationObject).features.get(0).value_s.equals("smp") && !(environment.right as DeclarationObject).features.get(0).value_s.equals("k8s")]»
-						«generateTerminationQueue(element,1)»
-				«ENDFOR»
-				
-				«FOR element : resource.allContents.toIterable.filter(Expression)»
-					«IF checkBlock(element.eContainer)==false»
-						«generateExpression(element,"main")»
-					«ENDIF»
-				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall)
-				.filter[!(environment.right as DeclarationObject).features.get(0).equals("smp")]»
-					«undeployFlyFunctionOnCloud(element)»
-				«ENDFOR»
-				«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s) 
-					&& ((right as DeclarationObject).features.get(0).value_s.equals("smp"))]»
-					__thread_pool_«element.name».shutdown();
-				«ENDFOR»
-				System.exit(0);
-			}
-				
-			«FOR element : resource.allContents.toIterable.filter(FunctionDefinition)»
-				«IF checkBlock(element.eContainer)==false»
-					«generateFunctionDefinition(element)»
-				«ENDIF»	
-			«ENDFOR»	
-	«ENDIF»
-
-			private static String __generateString(Table t,int id) {
-				StringBuilder b = new StringBuilder();
-				b.append("{\"id\":\""+id+"\",\"data\":");
-				b.append("[");
-				int i_r = t.rowCount();
-				for(Row r : t) {
-					b.append('{');
-					for (int i=0;i< r.columnCount();i++) {
-						b.append("\""+ r.columnNames().get(i) +"\":\""+r.getObject(i)+ ((i<r.columnCount()-1)?"\",":""));
-					}
-					b.append("\"}"+(((i_r != 1 ))?",":""));
-					i_r--;
-				}
-				b.append("]}");
-				return b.toString();
-			}
-			
-			private static String __generateString(String s,int id) {
-				StringBuilder b = new StringBuilder();
-				b.append("{\"id\":"+id+",\"data\":");
-				b.append("[");
-				String[] tmp = s.split("\n");
-				for(String t: tmp){
-					b.append(t);
-					if(t != tmp[tmp.length-1]){
-						b.append(",");
-					} 
-				}
-				b.append("]}");
-				return b.toString();
-			}
-		
-	}
-	'''
-
 	
 	def generateVMClusterFunction(FlyFunctionCall call, String scope) {
 		
@@ -1027,34 +656,8 @@ class FLYGenerator extends AbstractGenerator {
 		return s
 	}
 		
+	
 
-		def CharSequence undeployK8s(){
-		return
-		'''
-		Runtime.getRuntime().exec("chmod +x src-gen/kubernetes_undeploy.sh");
-		ProcessBuilder __processBuilder_undeploy_kubernetes= new ProcessBuilder("/bin/bash", "-c", "src-gen/kubernetes_undeploy.sh");
-		Map<String, String> __env_undeploy_kubernetes = __processBuilder_undeploy_kubernetes.environment();
-							
-		__processBuilder_undeploy_kubernetes.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-		__processBuilder_undeploy_kubernetes.redirectError(ProcessBuilder.Redirect.INHERIT);
-		String __path_env_undeploy_kubernetes = __env_undeploy_kubernetes.get("PATH");
-				if (!__path_env_undeploy_kubernetes.contains("/usr/local/bin")) {
-										 __env_undeploy_kubernetes.put("PATH", __path_env_undeploy_kubernetes+":/usr/local/bin");
-									}
-									Process __p_undeploy_kubernetes;
-									try {
-										__p_undeploy_kubernetes= __processBuilder_undeploy_kubernetes.start();
-										__p_undeploy_kubernetes.waitFor();
-										if(__p_undeploy_kubernetes.exitValue()!=0){
-											System.out.println("Error in kubernetes_undeploy.sh ");
-											System.exit(1);
-										}
-									} catch (Exception e) {
-										e.printStackTrace();
-									}	
-				'''					
-				}
-		
  	def CharSequence compileJava(Resource resource){
 	var termination_init_counter = 0
 	var termination_counter = 0
@@ -2913,19 +2516,6 @@ class FLYGenerator extends AbstractGenerator {
 				__fly_environment.get("«dec_name»").put("count","«count»");	
 			'''
 		}
-			else if (env.contains("k8s")) {
-			var language =  ((dec.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s
-			var nreplicas = ((dec.right as DeclarationObject).features.get(2) as DeclarationFeature).value_t
-			var nparallels= ((dec.right as DeclarationObject).features.get(3) as DeclarationFeature).value_t
-			return '''
-				__fly_environment.put("«dec_name»", new HashMap<String,Object>());
-				__fly_environment.get("«dec_name»").put("language","«language»");
-				__fly_environment.get("«dec_name»").put("nreplicas",«nreplicas»);
-				__fly_environment.get("«dec_name»").put("nparallels",«nparallels»);
-				}
-			'''
-			}
-		
 		
 	}
 
@@ -2963,70 +2553,6 @@ class FLYGenerator extends AbstractGenerator {
 			filter[(right as DeclarationObject).features.get(0).value_s.equals("smp")].get(0)
 		var local = local_env.name
 		switch env {
-			case "k8s":{			
-			if(!right_env.contains("smp")){
-			return '''
-			Jedis jedis = new Jedis(svcIP.toString(),6379);
-			for(int __i=0;__i< (Integer)__fly_environment.get("cloud").get("nthread");__i++){ 
-			«dec.name».put(jedis.rpop("queue:jobs"));
-			}
-			estimation();
-			Runtime.getRuntime().exec("chmod +x src-gen/kubernetes_undeploy.sh");
-								ProcessBuilder __processBuilder_undeploy_kubernetes= new ProcessBuilder("/bin/bash", "-c", "src-gen/kubernetes_undeploy.sh");
-								Map<String, String> __env_undeploy_kubernetes = __processBuilder_undeploy_kubernetes.environment();
-													
-								__processBuilder_undeploy_kubernetes.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-								__processBuilder_undeploy_kubernetes.redirectError(ProcessBuilder.Redirect.INHERIT);
-								String __path_env_undeploy_kubernetes = __env_undeploy_kubernetes.get("PATH");
-								if (!__path_env_undeploy_kubernetes.contains("/usr/local/bin")) {
-														 __env_undeploy_kubernetes.put("PATH", __path_env_undeploy_kubernetes+":/usr/local/bin");
-													}
-													Process __p_undeploy_kubernetes;
-													try {
-														__p_undeploy_kubernetes= __processBuilder_undeploy_kubernetes.start();
-														__p_undeploy_kubernetes.waitFor();
-														if(__p_undeploy_kubernetes.exitValue()!=0){
-															System.out.println("Error in kubernetes_undeploy.sh ");
-															System.exit(1);
-														}
-													} catch (Exception e) {
-														e.printStackTrace();
-													}
-						}		
-			'''
-			
-			}
-			else
-			return '''
-			Jedis jedis = new Jedis(svcIP.toString(),30014);
-			for(int __i=0;__i< (Integer)__fly_environment.get("local").get("nthread");__i++){ 
-			«dec.name».put(jedis.rpop("queue:jobs"));
-			}
-			estimation();
-			Runtime.getRuntime().exec("chmod +x src-gen/kubernetes_undeploy.sh");
-					ProcessBuilder __processBuilder_undeploy_kubernetes= new ProcessBuilder("/bin/bash", "-c", "src-gen/kubernetes_undeploy.sh");
-					Map<String, String> __env_undeploy_kubernetes = __processBuilder_undeploy_kubernetes.environment();
-										
-					__processBuilder_undeploy_kubernetes.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-					__processBuilder_undeploy_kubernetes.redirectError(ProcessBuilder.Redirect.INHERIT);
-					String __path_env_undeploy_kubernetes = __env_undeploy_kubernetes.get("PATH");
-					if (!__path_env_undeploy_kubernetes.contains("/usr/local/bin")) {
-											 __env_undeploy_kubernetes.put("PATH", __path_env_undeploy_kubernetes+":/usr/local/bin");
-										}
-										Process __p_undeploy_kubernetes;
-										try {
-											__p_undeploy_kubernetes= __processBuilder_undeploy_kubernetes.start();
-											__p_undeploy_kubernetes.waitFor();
-											if(__p_undeploy_kubernetes.exitValue()!=0){
-												System.out.println("Error in kubernetes_undeploy.sh ");
-												System.exit(1);
-											}
-										} catch (Exception e) {
-											e.printStackTrace();
-										}
-			}		
-			'''
-			}
 			case "aws":
 			return '''
 				__sqs_«env_name».createQueue(new CreateQueueRequest("«dec.name»-"+__id_execution));
@@ -6241,17 +5767,6 @@ class FLYGenerator extends AbstractGenerator {
 			filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]
 		){
 			if ((env.right as DeclarationObject).features.get(0).value_s.equals("azure"))
-				return true
-		}
-		return false
-	}
-
-	
-	def Boolean isK8s(){
-			for(VariableDeclaration env: res.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-				filter[list_environment.contains((right as DeclarationObject).features.get(0).value_s)]
-		){
-			if ((env.right as DeclarationObject).features.get(0).value_s.equals("k8s") || (env.right as DeclarationObject).features.get(0).value_s.equals("k8s-azure"))
 				return true
 		}
 		return false
