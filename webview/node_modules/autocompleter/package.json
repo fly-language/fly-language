@@ -1,0 +1,56 @@
+{
+  "name": "autocompleter",
+  "version": "5.1.0",
+  "description": "Blazing fast and lightweight autocomplete library without dependencies. 1KB gzipped.",
+  "main": "autocomplete.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "rollup -c"
+  },
+  "author": "Denys Krasnoshchok",
+  "license": "MIT",
+  "devDependencies": {
+    "rollup": "1.16.7",
+    "rollup-plugin-sourcemaps": "0.4.2",
+    "rollup-plugin-typescript2": "0.21.2",
+    "tslint": "5.18.0",
+    "typescript": "3.5.3"
+  },
+  "homepage": "https://kraaden.github.io/autocomplete/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kraaden/autocomplete.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kraaden/autocomplete/issues"
+  },
+  "types": "./autocomplete.d.ts",
+  "keywords": [
+    "autocomplete",
+    "autocompleter",
+    "lightweight",
+    "javascript",
+    "auto-complete",
+    "vanilla",
+    "vanilla-js",
+    "input",
+    "ui",
+    "complete",
+    "ajax",
+    "form",
+    "component",
+    "collapse",
+    "dropdown",
+    "suggester",
+    "fast",
+    "tiny",
+    "small",
+    "typescript",
+    "widget",
+    "grouping",
+    "group",
+    "groups",
+    "categories",
+    "category"
+  ]
+}

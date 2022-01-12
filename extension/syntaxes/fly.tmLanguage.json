@@ -1,0 +1,58 @@
+{
+    "name": "FLY DSL",
+    "scopeName": "source.fly",
+    "fileTypes": [
+        "fly"
+    ],
+    "patterns": [
+        {
+            "include": "#comments"
+        },
+        {
+            "name": "constant.numeric.fly",
+            "match": "\\b[1-9][0-9]*\\b"
+        },
+        {
+            "name": "string.quoted.double.fly",
+            "begin": "\"",
+            "end": "\""
+        },
+        {
+            "name": "string.quoted.single.fly",
+            "begin": "'",
+            "end": "'"
+        }
+    ],
+    "repository": 
+        {
+            "comments": {
+                "patterns": [
+                    {
+                        "name": "comment.block.fly",
+                        "begin": "/\\*",
+                        "beginCaptures": {
+                            "0": {
+                                "name": "punctuation.definition.comment.fly"
+                            }
+                        },
+                        "end": "\\*/",
+                        "endCaptures": {
+                            "0": {
+                                "name": "punctuation.definition.comment.fly"
+                            }
+                        }
+                    }, {
+                        "begin": "(^\\s+)?(?=//)",
+                        "beginCaptures": {
+                            "1": {
+                                "name": "punctuation.whitespace.comment.leading.cs"
+                            }
+                        },
+                        "end": "(?=$)",
+                        "name":"comment.line.fly"
+                    }
+                ]
+            }
+        }
+    
+}
