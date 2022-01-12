@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <classpath>
 	<classpathentry kind="output" path="bin/default"/>
-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-11/"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8/"/>
 	<classpathentry kind="src" path="/org.xtext.FLY"/>
 	<classpathentry sourcepath="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.xbase.ide/2.22.0/9596189c8635be59a9c9a0364aed3b34f67fa828/org.eclipse.xtext.xbase.ide-2.22.0-sources.jar" kind="lib" path="/Users/antoniodecaro/.gradle/caches/modules-2/files-2.1/org.eclipse.xtext/org.eclipse.xtext.xbase.ide/2.22.0/1f291db060d2da8cfdf7fe54f342bee46fa85735/org.eclipse.xtext.xbase.ide-2.22.0.jar">
 		<attributes>

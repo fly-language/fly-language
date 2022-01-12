@@ -1,0 +1,5 @@
+var c = [type="smp",nthread=3]
+
+for i in [0:11] {
+    println "ciao" 
+}

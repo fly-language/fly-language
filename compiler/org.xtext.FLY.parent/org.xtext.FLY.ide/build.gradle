@@ -1,8 +1,3 @@
-plugins {
-	id 'com.github.johnrengelman.shadow' version '5.2.0'
-}
-
-
 dependencies {
 	compile project(':org.xtext.FLY')
 	compile "org.eclipse.xtext:org.eclipse.xtext.ide:${xtextVersion}"
@@ -16,32 +11,15 @@ dependencies {
 }
 
 apply plugin: 'application'
-apply plugin: 'com.github.johnrengelman.shadow'
 applicationName = 'fly-server'
 mainClassName = "org.eclipse.xtext.ide.server.ServerLauncher"
 
 task unzipServer(type: Copy, dependsOn: distZip) {
 	def zipFile = file("${buildDir}/distributions/fly-server-${version}.zip")
-	def outputDir = file("${buildDir}/../../../../vscode-extension/extension/server")
+	def outputDir = file("${rootDir}/../../lsp/fly-sprotty-vscode-ext/extension/server")
 
 	from zipTree(zipFile)
 	into outputDir
 }
 
-shadowJar {
-	from(project.convention.getPlugin(JavaPluginConvention).sourceSets.main.output)
-	configurations = [project.configurations.runtime]
-	exclude('META-INF/INDEX.LIST', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA','schema/*',
-		'.options', '.api_description', '*.profile', '*.html', 'about.*', 'about_files/*',
-		'plugin.xml', 'systembundle.properties', 'profile.list')
-	classifier = 'ls'
-	append('plugin.properties')
-}
-
-task unzipShadow(type: Copy, dependsOn: shadowJar) {
-	def zipFile = file("${buildDir}/distributions/org.xtext.FLY.ide-shadow-${version}.zip")
-	def outputDir = file("${buildDir}/../../../../vscode-extension/extension/server")
-
-	from zipTree(zipFile)
-	into outputDir
-}
+build.dependsOn unzipServer
