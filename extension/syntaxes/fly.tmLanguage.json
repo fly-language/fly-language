@@ -10,7 +10,23 @@
         },
         {
             "name": "constant.numeric.fly",
-            "match": "\\b[1-9][0-9]*\\b"
+            "match": "\\b[0-9]+(.[0-9])*\\b"
+        },
+        {
+            "name": "constant.language.fly",
+            "match": "\\b(true|false)\\b"
+        },
+        {
+            "name": "keyword.control.fly",
+            "match": "\\b(if|else|for|while|in|on|as|return|then|thenall|fly)\\b"
+        },
+        {
+            "name": "keyword.operator.fly",
+            "match": "\\b(\\*|\\+|-|/|=|\\?|!)\\b"
+        },
+        {
+            "name": "keyword.other.fly",
+            "match": "\\b(and|or|not)\\b"
         },
         {
             "name": "string.quoted.double.fly",
@@ -21,6 +37,32 @@
             "name": "string.quoted.single.fly",
             "begin": "'",
             "end": "'"
+        },
+        {
+            "match": "\\b(func)\\b\\W+\\b([a-zA-Z]\\w*)\\b",
+            "captures": {
+                "1": {"name": "storage.type.fly"},
+                "2": {"name": "entity.name.function.fly"}
+            }
+        },
+        {
+            "match": "\\b(var|val)\\b\\W+([a-zA-Z]\\w*)\\b",
+            "captures": {
+                "1": {"name": "storage.type.fly"},
+                "2": {"name": "variable.parameter.fly"}
+            }
+        },
+        {
+            "name": "support.function.fly",
+            "match": "\\bprintln\\b"
+        },
+        {
+            "name": "entity.name.function.fly",
+            "match": "\\b([a-zA-Z]\\w+)\\b\\("
+        },
+        {
+            "name": "entity.name.type.fly",
+            "match": "\\b(Integer|Double|Boolean|String|Object|Datetime)\\b"
         }
     ],
     "repository": 
