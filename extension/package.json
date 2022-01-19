@@ -164,6 +164,7 @@
         "build": "tsc && webpack --mode=development",
         "watch": "tsc -w",
         "watch:webpack": "webpack --mode=development --watch",
+        "package": "vsce package",
         "publish": "vsce publish"
     }
 }
