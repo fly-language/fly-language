@@ -1,9 +1,9 @@
 {
-    "name": "vscode-fly-language-sprotty",
+    "name": "fly-extension",
     "displayName": "FLY Language",
     "description": "FLY language LSP integration in VSCode",
     "publisher": "ISISLab",
-    "version": "0.0.3",
+    "version": "0.0.1",
     "engines": {
         "vscode": "^1.46.0"
     },
