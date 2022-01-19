@@ -461,7 +461,14 @@ class FLYGenerator extends AbstractGenerator {
 			int numThreadsAvailable = Runtime.getRuntime().availableProcessors();
 			
 			String myObjectInput = args[0];
-			__id_execution = Long.parseLong(args[1]);
+			String[] mySplits = myObjectInput.split("\u2662");
+			int mySplitsCount = Integer.parseInt(mySplits[0]);
+			
+			String constObjects = args[1];
+			String[] myConsts = null;
+			if(!constObjects.equals("None")) myConsts = constObjects.split("\u2662");
+			
+			__id_execution = Long.parseLong(args[2]);
 				
 			«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
 				«initialiseConstant(element,"main")»
@@ -485,10 +492,37 @@ class FLYGenerator extends AbstractGenerator {
 						«element.environment.get(0).name».createQueue("«element.name»-"+__id_execution);	
 				«ENDIF»
 			«ENDFOR»
+			
+			int x = 1;
+			JSONObject constJsonObject = null;
+			JSONArray constJsonArray = null;
+			«FOR element: res.allContents.toIterable.filter(ConstantDeclaration)»
+				constJsonObject = new JSONObject(myConsts[x]);
+				x++;
+				«var name = element.name»
+				«var constInfo = typeSystem.get("main").get(element.name)»
+				
+				«IF constInfo.contains("Array")»
+					constJsonArray = new JSONArray(constJsonObject.get("value").toString());
+					for (int j=0; j< «name».length; j++){
+						«name»[j] = constJsonArray.getInt(j);
+					}
+				«ELSEIF constInfo.contains("Matrix")»
+					constJsonArray = new JSONArray(constJsonObject.get("value").toString());
+					for (int j=0; j< «name».length; j++){
+						JSONArray jsonRow = new JSONArray(constJsonArray.get(j).toString());
+						for (int k=0; k< «name».length; k++){
+							«name»[j][k] = jsonRow.getInt(k);
+						}
+					}
+				«ELSE»
+					«name» = («constInfo») constJsonObject.get("value");
+				«ENDIF»
+			«ENDFOR»
 
 			«FOR element : resource.allContents.toIterable.filter(Expression)»
 				«IF checkBlock(element.eContainer)==false»
-					«IF (element instanceof VariableDeclaration)»
+					«IF element instanceof VariableDeclaration || element instanceof ConstantDeclaration»
 						«generateExpression(element,"main")»
 					«ENDIF»
 				«ENDIF»
@@ -525,54 +559,27 @@ class FLYGenerator extends AbstractGenerator {
 					final AtomicInteger __count = new AtomicInteger(0);
 				'''
 			}
-
-			if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
-					null &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
-					equals("HashMap")) { // f_index is a reference to an object
-					//TO DO
-			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
-					null &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
-					equals("Table")) { // f_index is a reference to a Table
-					//TO DO
-			} else if ((call.input as FunctionInput).f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name) !=
-					null &&
-				typeSystem.get(scope).get(((call.input as FunctionInput).f_index as VariableLiteral).variable.name).
-					equals("File")) { // f_index is a txt file	
-					//TO DO
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Directory")){
-					//TO DO
-			} else if(call.input.f_index instanceof VariableLiteral &&
-				(typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Array")
-				|| typeSystem.get(scope).get((call.input.f_index as VariableLiteral).variable.name).contains("Matrix"))){
+			if ((call.input as FunctionInput).f_index instanceof VariableLiteral){
 					s+='''
-							String[] mySplits = myObjectInput.split("@@@@@");
-							int mySplitsCount = Integer.parseInt(mySplits[0]);
-							
-							int numThreadsToUse = numThreadsAvailable;
-							if (mySplitsCount < numThreadsAvailable) numThreadsToUse = mySplitsCount;
-							
-							for(int __i=0;__i< numThreadsToUse;__i++){
-								final int i = __i;
-								Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-											
-									public Object call() throws Exception {
+						int numThreadsToUse = numThreadsAvailable;
+						if (mySplitsCount < numThreadsAvailable) numThreadsToUse = mySplitsCount;
+						
+						for(int __i=0;__i< numThreadsToUse;__i++){
+							final int i = __i;
+							Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 										
-										Object __ret = «call.target.name»(mySplits[i+1]);
-										«IF call.isIs_then»
-											«call.then.name»();
-										«ENDIF»					
-										return __ret;
-									}
-								});
-								«call.target.name»_«func_ID»_return.add(_f);
-							}
-						'''
+								public Object call() throws Exception {
+									
+									Object __ret = «call.target.name»(mySplits[i+1]);
+									«IF call.isIs_then»
+										«call.then.name»();
+									«ENDIF»					
+									return __ret;
+								}
+							});
+							«call.target.name»_«func_ID»_return.add(_f);
+						}
+					'''
 			} else { // f_index is a range
 				s += '''
 					JSONObject jsonObject = new JSONObject(myObjectInput);
@@ -3673,7 +3680,20 @@ class FLYGenerator extends AbstractGenerator {
 			}
 			
 			s += '''
+				ArrayList<String> constVariables_«func_ID» = new ArrayList<String>();
+				«FOR element: res.allContents.toIterable.filter(ConstantDeclaration)»
+					«var name = element.name»
+					«var constInfo = typeSystem.get(scope).get(element.name)»
+					
+					«IF constInfo.contains("Array") || constInfo.contains("Matrix")»
+						constVariables_«func_ID».add("{\"name\":\"«name»\",\"type\":\"«constInfo»\",\"value\":\""+Arrays.deepToString(«element.name»)+"\"}");
+					«ELSE»
+						constVariables_«func_ID».add("{\"name\":\"«name»\",\"type\":\"«constInfo»\",\"value\":"+«element.name»+"}");
+					«ENDIF»
+				«ENDFOR»
+						
 				«clusterEnvName».executeFLYonVMCluster(portionInputs_«func_ID»,
+												constVariables_«func_ID»,
 												numberOfFunctions_«func_ID»,
 												__id_execution);
 				
