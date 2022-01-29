@@ -458,18 +458,20 @@ class FLYGenerator extends AbstractGenerator {
 				
 		public static void main(String[] args) throws Exception{
 			
-			int numThreadsAvailable = Runtime.getRuntime().availableProcessors();
+			int __numThreadsAvailable = Runtime.getRuntime().availableProcessors();
 			
-			String myObjectInput = args[0];
-			String[] mySplits = myObjectInput.split("\u2662");
-			int mySplitsCount = Integer.parseInt(mySplits[0]);
+			String __myObjectInputFileName = args[0];
+			__id_execution = Long.parseLong(args[1]);
 			
-			String constObjects = args[1];
-			String[] myConsts = null;
-			if(!constObjects.equals("None")) myConsts = constObjects.split("\u2662");
+			«IF (funcCall.environment.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws")»
+				«funcCall.environment.environment.get(0).name» = new AWSClient(creds,"«(funcCall.environment.environment.get(0).right as DeclarationObject).features.get(4).value_s»");
+				«funcCall.environment.environment.get(0).name».setupS3Bucket("flybucketvmcluster");
+				«funcCall.environment.environment.get(0).name».downloadS3ObjectToFile(__myObjectInputFileName);
+				«funcCall.environment.environment.get(0).name».downloadS3ObjectToFile("constValues.txt");
+			«ELSEIF (funcCall.environment.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("azure")»
 			
-			__id_execution = Long.parseLong(args[2]);
-				
+			«ENDIF»
+			
 			«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
 				«initialiseConstant(element,"main")»
 			«ENDFOR»
@@ -493,30 +495,42 @@ class FLYGenerator extends AbstractGenerator {
 				«ENDIF»
 			«ENDFOR»
 			
-			int x = 1;
-			JSONObject constJsonObject = null;
-			JSONArray constJsonArray = null;
+			FileInputStream __fis = new FileInputStream("constValues.txt");       
+			Scanner __sc = new Scanner(__fis);
+			
+			int __y =0;
+			ArrayList<String> __myConsts = new ArrayList<>();
+			while(__sc.hasNextLine()){ 
+				String __c = __sc.nextLine();
+				if (__y == 0 && __c.equals("None")) break;
+				__myConsts.add(__c);
+			}  
+			__sc.close();
+					
+			int __x = 0;
+			JSONObject __constJsonObject = null;
+			JSONArray __constJsonArray = null;
 			«FOR element: res.allContents.toIterable.filter(ConstantDeclaration)»
-				constJsonObject = new JSONObject(myConsts[x]);
-				x++;
+				__constJsonObject = new JSONObject(__myConsts.get(__x));
+				__x++;
 				«var name = element.name»
 				«var constInfo = typeSystem.get("main").get(element.name)»
 				
 				«IF constInfo.contains("Array")»
-					constJsonArray = new JSONArray(constJsonObject.get("value").toString());
-					for (int j=0; j< «name».length; j++){
-						«name»[j] = constJsonArray.getInt(j);
+					__constJsonArray = new JSONArray(__constJsonObject.get("value").toString());
+					for (int __j=0; __j< «name».length; __j++){
+						«name»[__j] = __constJsonArray.getInt(__j);
 					}
 				«ELSEIF constInfo.contains("Matrix")»
-					constJsonArray = new JSONArray(constJsonObject.get("value").toString());
-					for (int j=0; j< «name».length; j++){
-						JSONArray jsonRow = new JSONArray(constJsonArray.get(j).toString());
-						for (int k=0; k< «name».length; k++){
-							«name»[j][k] = jsonRow.getInt(k);
+					__constJsonArray = new JSONArray(__constJsonObject.get("value").toString());
+					for (int __j=0; __j< «name».length; __j++){
+						JSONArray __jsonRow = new JSONArray(__constJsonArray.get(__j).toString());
+						for (int __k=0; __k< «name».length; __k++){
+							«name»[__j][__k] = __jsonRow.getInt(__k);
 						}
 					}
 				«ELSE»
-					«name» = («constInfo») constJsonObject.get("value");
+					«name» = («constInfo») __constJsonObject.get("value");
 				«ENDIF»
 			«ENDFOR»
 
@@ -561,16 +575,29 @@ class FLYGenerator extends AbstractGenerator {
 			}
 			if ((call.input as FunctionInput).f_index instanceof VariableLiteral){
 					s+='''
-						int numThreadsToUse = numThreadsAvailable;
-						if (mySplitsCount < numThreadsAvailable) numThreadsToUse = mySplitsCount;
+						__fis = new FileInputStream(__myObjectInputFileName);       
+						__sc = new Scanner(__fis);
 						
-						for(int __i=0;__i< numThreadsToUse;__i++){
-							final int i = __i;
+						ArrayList<String> __mySplits = new ArrayList<>();
+						int __mySplitsCount = 0;
+						__y = 0;
+						while(__sc.hasNextLine()){
+							String __c = __sc.nextLine(); 
+							if (__y++ == 0) __mySplitsCount = Integer.parseInt(__c);
+							else __mySplits.add(__c);
+						}
+						__sc.close();
+								
+						int __numThreadsToUse = __numThreadsAvailable;
+						if (__mySplitsCount < __numThreadsAvailable) __numThreadsToUse = __mySplitsCount;
+						
+						for(int _i=0;_i< __numThreadsToUse;_i++){
+							final int __i = _i;
 							Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 										
 								public Object call() throws Exception {
 									
-									Object __ret = «call.target.name»(mySplits[i+1]);
+									Object __ret = «call.target.name»(__mySplits.get(__i));
 									«IF call.isIs_then»
 										«call.then.name»();
 									«ENDIF»					
@@ -582,13 +609,13 @@ class FLYGenerator extends AbstractGenerator {
 					'''
 			} else { // f_index is a range
 				s += '''
-					JSONObject jsonObject = new JSONObject(myObjectInput);
-					jsonObject = new JSONObject(jsonObject.getJSONArray("data").get(0).toString());
+					JSONObject __jsonObject = new JSONObject(__myObjectInput);
+					__jsonObject = new JSONObject(__jsonObject.getJSONArray("data").get(0).toString());
 					
-					int portionRangeLength = jsonObject.getInt("portionRangeLength");
-					int portionRangeIndex = jsonObject.getInt("portionRangeIndex");
+					int __portionRangeLength = __jsonObject.getInt("portionRangeLength");
+					int __portionRangeIndex = __jsonObject.getInt("portionRangeIndex");
 					
-					for(int _i=0;_i<portionRangeLength;_i++){
+					for(int _i=0;_i<__portionRangeLength;_i++){
 						final int __i = _i;
 						Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 							
@@ -3426,7 +3453,9 @@ class FLYGenerator extends AbstractGenerator {
 			«ENDFOR»
 			
 			«IF clusterEnv.equals("aws")»
-				«clusterEnvName» = new AWSClient(creds, "«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»", __termination_«call.target.name»_url_«func_termination_counter»);
+				«clusterEnvName» = new AWSClient(creds, "«(((call.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»");
+				«clusterEnvName».setupTerminationQueue(__termination_«call.target.name»_url_«func_termination_counter»);
+				«clusterEnvName».setupS3Bucket("flybucketvmcluster");
 			«ENDIF»
 			
 			int vCPUsCount_«func_ID» = «clusterEnvName».getVCPUsCount(vmTypeSize_«id_execution»);
