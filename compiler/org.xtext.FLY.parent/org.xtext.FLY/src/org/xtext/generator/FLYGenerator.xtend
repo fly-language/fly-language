@@ -303,13 +303,13 @@ class FLYGenerator extends AbstractGenerator {
 				«FOR element: res.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
 					filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
 					__wait_on_«element.name»=false;
-					«IF (element.environment.get(0).right as DeclarationObject).features.get(0).equals("aws")»
+					«IF (element.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws")»
 						__sqs_«element.environment.get(0).name».deleteQueue(new DeleteQueueRequest("«element.name»-"+__id_execution));
 					«ENDIF»
 				«ENDFOR»
 				
 				«FOR element: resource.allContents.toIterable.filter(FlyFunctionCall).filter[(environment.right as DeclarationObject).features.get(0).value_s.equals("vm-cluster")]»
-					«IF ((element.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(0).equals("aws")»
+					«IF ((element.environment as VariableDeclaration).environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws")»
 						__sqs_«(element.environment as VariableDeclaration).environment.get(0).name».deleteQueue(new DeleteQueueRequest("termination-«element.target.name»-"+__id_execution));
 					«ENDIF»
 					«(element.environment as VariableDeclaration).environment.get(0).name».deleteResourcesAllocated();
@@ -361,6 +361,9 @@ class FLYGenerator extends AbstractGenerator {
 	import java.nio.ByteBuffer;
 	import java.nio.channels.FileChannel;
 	import java.nio.file.StandardOpenOption;
+	import java.nio.charset.StandardCharsets;
+	import java.nio.file.Files;
+	import java.nio.file.Paths;
 	import java.io.InputStream;
 	import java.net.ServerSocket;
 	import java.net.Socket;
@@ -467,70 +470,25 @@ class FLYGenerator extends AbstractGenerator {
 				«funcCall.environment.environment.get(0).name» = new AWSClient(creds,"«(funcCall.environment.environment.get(0).right as DeclarationObject).features.get(4).value_s»");
 				«funcCall.environment.environment.get(0).name».setupS3Bucket("flybucketvmcluster");
 				«funcCall.environment.environment.get(0).name».downloadS3ObjectToFile(__myObjectInputFileName);
-				«funcCall.environment.environment.get(0).name».downloadS3ObjectToFile("constValues.txt");
 			«ELSEIF (funcCall.environment.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("azure")»
-			
+				«funcCall.environment.environment.get(0).name» = new AzureClient("«((funcCall.environment.environment.get(0).right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
+					"«((funcCall.environment.environment.get(0).right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
+					"«((funcCall.environment.environment.get(0).right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
+					"«((funcCall.environment.environment.get(0).right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
+					__id_execution+"",
+					"«((funcCall.environment.environment.get(0).right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»");
+					
+				«funcCall.environment.environment.get(0).name».VMClusterInit();
 			«ENDIF»
 			
 			«FOR element : (resource.allContents.toIterable.filter(Expression).filter(ConstantDeclaration))»
 				«initialiseConstant(element,"main")»
-			«ENDFOR»
-
-			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[right instanceof DeclarationObject].
-			filter[((right as DeclarationObject).features.get(0).value_s.equals("azure"))]»
-				«element.name» = new AzureClient("«((element.right as DeclarationObject).features.get(1) as DeclarationFeature).value_s»",
-					"«((element.right as DeclarationObject).features.get(2) as DeclarationFeature).value_s»",
-					"«((element.right as DeclarationObject).features.get(3) as DeclarationFeature).value_s»",
-					"«((element.right as DeclarationObject).features.get(4) as DeclarationFeature).value_s»",
-					__id_execution+"",
-					"«((element.right as DeclarationObject).features.get(5) as DeclarationFeature).value_s»");
-					
-				«element.name».VMClusterInit();
 			«ENDFOR»
 			
 			«FOR element: resource.allContents.toIterable.filter(VariableDeclaration).filter[onCloud].filter[right instanceof DeclarationObject].
 			filter[(right as DeclarationObject).features.get(0).value_s.equals("channel")]»
 				«IF ((element.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s.equals("azure")»
 						«element.environment.get(0).name».createQueue("«element.name»-"+__id_execution);	
-				«ENDIF»
-			«ENDFOR»
-			
-			FileInputStream __fis = new FileInputStream("constValues.txt");       
-			Scanner __sc = new Scanner(__fis);
-			
-			int __y =0;
-			ArrayList<String> __myConsts = new ArrayList<>();
-			while(__sc.hasNextLine()){ 
-				String __c = __sc.nextLine();
-				if (__y == 0 && __c.equals("None")) break;
-				__myConsts.add(__c);
-			}  
-			__sc.close();
-					
-			int __x = 0;
-			JSONObject __constJsonObject = null;
-			JSONArray __constJsonArray = null;
-			«FOR element: res.allContents.toIterable.filter(ConstantDeclaration)»
-				__constJsonObject = new JSONObject(__myConsts.get(__x));
-				__x++;
-				«var name = element.name»
-				«var constInfo = typeSystem.get("main").get(element.name)»
-				
-				«IF constInfo.contains("Array")»
-					__constJsonArray = new JSONArray(__constJsonObject.get("value").toString());
-					for (int __j=0; __j< «name».length; __j++){
-						«name»[__j] = __constJsonArray.getInt(__j);
-					}
-				«ELSEIF constInfo.contains("Matrix")»
-					__constJsonArray = new JSONArray(__constJsonObject.get("value").toString());
-					for (int __j=0; __j< «name».length; __j++){
-						JSONArray __jsonRow = new JSONArray(__constJsonArray.get(__j).toString());
-						for (int __k=0; __k< «name».length; __k++){
-							«name»[__j][__k] = __jsonRow.getInt(__k);
-						}
-					}
-				«ELSE»
-					«name» = («constInfo») __constJsonObject.get("value");
 				«ENDIF»
 			«ENDFOR»
 
@@ -574,13 +532,42 @@ class FLYGenerator extends AbstractGenerator {
 				'''
 			}
 			if ((call.input as FunctionInput).f_index instanceof VariableLiteral){
+				if ((call.environment.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("azure")){
 					s+='''
-						__fis = new FileInputStream(__myObjectInputFileName);       
-						__sc = new Scanner(__fis);
+						List<String> lines = Collections.emptyList();
+						lines = Files.readAllLines(Paths.get(__myObjectInputFileName), StandardCharsets.UTF_8);
+
+						int __mySplitsCount = Integer.parseInt(lines.get(0));
+						lines.remove(0);
+								
+						int __numThreadsToUse = __numThreadsAvailable;
+						if (__mySplitsCount < __numThreadsAvailable) __numThreadsToUse = __mySplitsCount;
+						
+						for(int _i=0;_i< __numThreadsToUse;_i++){
+							final int __i = _i;
+							final String i_Split = lines.get(__i);
+							Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
+										
+								public Object call() throws Exception {
+									
+									Object __ret = «call.target.name»(i_Split);
+									«IF call.isIs_then»
+										«call.then.name»();
+									«ENDIF»					
+									return __ret;
+								}
+							});
+							«call.target.name»_«func_ID»_return.add(_f);
+						}
+					'''	
+				}else if((call.environment.environment.get(0).right as DeclarationObject).features.get(0).value_s.equals("aws")){
+					s+='''
+						FileInputStream __fis = new FileInputStream(__myObjectInputFileName);       
+						Scanner __sc = new Scanner(__fis);
 						
 						ArrayList<String> __mySplits = new ArrayList<>();
 						int __mySplitsCount = 0;
-						__y = 0;
+						int __y = 0;
 						while(__sc.hasNextLine()){
 							String __c = __sc.nextLine(); 
 							if (__y++ == 0) __mySplitsCount = Integer.parseInt(__c);
@@ -606,31 +593,34 @@ class FLYGenerator extends AbstractGenerator {
 							});
 							«call.target.name»_«func_ID»_return.add(_f);
 						}
-					'''
+					'''	
+				}
 			} else { // f_index is a range
 				s += '''
-					JSONObject __jsonObject = new JSONObject(__myObjectInput);
-					__jsonObject = new JSONObject(__jsonObject.getJSONArray("data").get(0).toString());
-					
-					int __portionRangeLength = __jsonObject.getInt("portionRangeLength");
-					int __portionRangeIndex = __jsonObject.getInt("portionRangeIndex");
-					
-					for(int _i=0;_i<__portionRangeLength;_i++){
-						final int __i = _i;
-						Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
-							
-							public Object call() throws Exception {
+						String __mySplit = new String(Files.readAllBytes(Paths.get(__myObjectInputFileName)));
+												
+						JSONObject __jsonObject = new JSONObject(__mySplit);
+						__jsonObject = new JSONObject(__jsonObject.getJSONArray("data").get(0).toString());
+						
+						int __portionRangeLength = __jsonObject.getInt("portionRangeLength");
+						int __portionRangeIndex = __jsonObject.getInt("portionRangeIndex");
+						
+						for(int _i=0;_i<__portionRangeLength;_i++){
+							final int __i = _i;
+							Future<Object> _f = __thread_pool_«call.environment.name».submit(new Callable<Object>(){
 								
-								Object __ret = «call.target.name»(«IF call.target.parameters.length==1»__i«ENDIF»);
-								«IF call.isIs_then»
-									«call.then.name»();
-								«ENDIF»					
-								return __ret;
-							}
-						});
-						«call.target.name»_«func_ID»_return.add(_f);
-					}
-				'''
+								public Object call() throws Exception {
+									
+									Object __ret = «call.target.name»(«IF call.target.parameters.length==1»__i«ENDIF»);
+									«IF call.isIs_then»
+										«call.then.name»();
+									«ENDIF»					
+									return __ret;
+								}
+							});
+							«call.target.name»_«func_ID»_return.add(_f);
+						}
+					'''
 			}
 			last_func_result = call.target.name + "_" + func_ID + "_return"
 
@@ -3569,7 +3559,7 @@ class FLYGenerator extends AbstractGenerator {
 										String myArrayPortionString = Arrays.toString(Arrays.copyOfRange(«(call.input.f_index as VariableLiteral).variable.name»,displ_«func_ID»[__i], displ_«func_ID»[__i]+dimPortions_«func_ID»[__i] ));
 									«ENDIF»
 									
-									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionLength\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":\""+myArrayPortionString+"\"}");							
+									__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).append("{\"portionLength\":"+dimPortions_«func_ID»[__i]+",\"portionIndex\":"+__i+",\"portionDisplacement\":"+displ_«func_ID»[__i]+",\"portionValues\":"+myArrayPortionString+"}");							
 									portionInputs_«func_ID».add(__generateString(__temp_«(call.input.f_index as VariableLiteral).variable.name»_«func_ID».get(__i).toString(),«func_ID»));
 								}
 								int numberOfFunctions_«func_ID» = splitCount_«func_ID»;
@@ -3708,21 +3698,8 @@ class FLYGenerator extends AbstractGenerator {
 					'''
 			}
 			
-			s += '''
-				ArrayList<String> constVariables_«func_ID» = new ArrayList<String>();
-				«FOR element: res.allContents.toIterable.filter(ConstantDeclaration)»
-					«var name = element.name»
-					«var constInfo = typeSystem.get(scope).get(element.name)»
-					
-					«IF constInfo.contains("Array") || constInfo.contains("Matrix")»
-						constVariables_«func_ID».add("{\"name\":\"«name»\",\"type\":\"«constInfo»\",\"value\":\""+Arrays.deepToString(«element.name»)+"\"}");
-					«ELSE»
-						constVariables_«func_ID».add("{\"name\":\"«name»\",\"type\":\"«constInfo»\",\"value\":"+«element.name»+"}");
-					«ENDIF»
-				«ENDFOR»
-						
+			s += '''	
 				«clusterEnvName».executeFLYonVMCluster(portionInputs_«func_ID»,
-												constVariables_«func_ID»,
 												numberOfFunctions_«func_ID»,
 												__id_execution);
 				
