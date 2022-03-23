@@ -68,69 +68,31 @@ class FLYGeneratorPython extends AbstractGenerator {
 	int nthread
 	int memory
 	int timeout
-	var right_env = ""
-	/*KUBERNETES ENVS*/
-	int nreplicas
-	int nparallels
-	String resourceGroup = ""
-	String clusterName = ""
-	String registryName = ""
-	
-	/*END*/
 	String user = null
 	Resource resourceInput
 	boolean isLocal
-	boolean isCluster
 	boolean isAsync 
 	String env_name=""
-	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure","k8s"));
+	var list_environment = new ArrayList<String>(Arrays.asList("smp","aws","aws-debug","azure"));
 	ArrayList listParams = null
 	List<String> allReqs=null
 
 	def generatePython(Resource input, IFileSystemAccess2 fsa, IGeneratorContext context, String name_file,
 		FunctionDefinition func, VariableDeclaration environment, HashMap<String, HashMap<String, String>> scoping,
-		long id, boolean local, boolean async, boolean cluster) {
+		long id, boolean local, boolean async) {
 		name = name_file
 		root = func
 		typeSystem = scoping
 		id_execution = id
 		env_name=environment.name
-		env = (environment.right as DeclarationObject).features.get(0).value_s
-		if (!local && !cluster) {
+		if (!local) {
 			env = (environment.right as DeclarationObject).features.get(0).value_s
 			user = (environment.right as DeclarationObject).features.get(1).value_s
 			language = (environment.right as DeclarationObject).features.get(5).value_s
 			nthread = (environment.right as DeclarationObject).features.get(6).value_t
 			memory = (environment.right as DeclarationObject).features.get(7).value_t
 			timeout = (environment.right as DeclarationObject).features.get(8).value_t					
-		} 
-		if(env == "k8s"){
-			env = (environment.right as DeclarationObject).features.get(0).value_s
-			right_env = ((environment.environment.get(0).right as DeclarationObject).features.get(0) as DeclarationFeature).value_s
-			resourceGroup = (environment.right as DeclarationObject).features.get(1).value_s
-			clusterName = (environment.right as DeclarationObject).features.get(2).value_s
-			registryName = (environment.right as DeclarationObject).features.get(3).value_s
-			switch (right_env){
-				case "azure":
-				{
-				 nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(7) as DeclarationFeature).value_t
-				 nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(7) as DeclarationFeature).value_t
-				}
-				case "aws":
-				{
-				 nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(6) as DeclarationFeature).value_t
-				 nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(6) as DeclarationFeature).value_t
-				}
-				case "smp":
-				{
-				language = (environment.right as DeclarationObject).features.get(2).value_s
-				 nparallels = ((environment.environment.get(0).right as DeclarationObject).features.get(2) as DeclarationFeature).value_t
-				 nreplicas = ((environment.environment.get(0).right as DeclarationObject).features.get(2) as DeclarationFeature).value_t
-				}
-				}
-				
-				}
-		else{
+		} else {
 			env = "smp"
 			language = (environment.right as DeclarationObject).features.get(2).value_s
 			nthread = (environment.right as DeclarationObject).features.get(1).value_t
@@ -146,7 +108,6 @@ class FLYGeneratorPython extends AbstractGenerator {
 		}
 		this.isAsync = async
 		this.isLocal = local;
-		this.isCluster = cluster;
 		doGenerate(input, fsa, context)
 	}
 
@@ -167,27 +128,16 @@ class FLYGeneratorPython extends AbstractGenerator {
 		
 		if(env.equals("azure"))
 			allReqs.add("azure-storage-queue")
-		if(env.equals("k8s"))
-			allReqs.add("redis")
-			
 		saveToRequirements(allReqs, fsa)
 		println(root.name)
 		if (isLocal) {
 			fsa.generateFile(root.name + ".py", input.compilePython(root.name, true))	
-		}
-		if(env.equals("k8s")){
-			
-			fsa.generateFile("Dockerfile", input.compileDockerTemplate())
-			fsa.generateFile("template.yaml", input.compileK8sJobTemplate())
-			fsa.generateFile("kubernetes_deploy.sh", input.compileScriptDeploy(root.name, false))
-			fsa.generateFile("kubernetes_undeploy.sh", input.compileScriptUndeploy(root.name, false))
-			
-			}
-		else{
+		}else {
+			if(env.equals("aws-debug"))
+			fsa.generateFile("docker-compose-script.sh",input.compileDockerCompose())
 			fsa.generateFile(root.name +"_"+ env_name +"_deploy.sh", input.compileScriptDeploy(root.name, false))
 			fsa.generateFile(root.name +"_"+ env_name + "_undeploy.sh", input.compileScriptUndeploy(root.name, false))
-			
-			}
+		}
 	}
 	
 	def channelsNames(BlockExpression exps) {
@@ -323,29 +273,17 @@ class FLYGeneratorPython extends AbstractGenerator {
 			
 			«IF env.contains("aws")»				
 			import boto3
-			«ENDIF»
-			
-			«IF env.contains("k8s")»				
-			import redis
-			«ENDIF»
-
 			«IF env.equals("aws")»
 				__sqs = boto3.resource('sqs', verify=False)
 				__rds = boto3.client('rds', verify=False)
-			«ELSEIF !env.equals("k8s")»
+			«ELSE»
 				__sqs = boto3.resource('sqs',endpoint_url='http://192.168.0.1:4576')
 			«ENDIF»
-			«IF env.contains("k8s")»				
-			redisClient = redis.StrictRedis(host='redis',port=6379)
-			«ENDIF»
-			«IF !env.contains("k8s")»				
-						
+
 			«FOR chName : channelNames»
-					«chName» = __sqs.get_queue_by_name(QueueName='«chName»-"${id}"')
-				«ENDFOR»
-			«ENDIF»
-				
-			«IF env == "azure"»
+				«chName» = __sqs.get_queue_by_name(QueueName='«chName»-"${id}"')
+			«ENDFOR»
+			«ELSEIF env == "azure"»
 			import azure.functions as func
 			from azure.storage.queue import QueueServiceClient
 			«ENDIF»
@@ -369,8 +307,6 @@ class FLYGeneratorPython extends AbstractGenerator {
 				except KeyError:
 				    print('No data founded...')
 			«ENDIF»
-			«IF !env.contains("k8s")»				
-			
 				«FOR exp : parameters»
 					«IF typeSystem.get(name).get((exp as VariableDeclaration).name).equals("Table") || typeSystem.get(name).get((exp as VariableDeclaration).name).equals("File")»
 						__columns = data[0].keys()
@@ -394,13 +330,13 @@ class FLYGeneratorPython extends AbstractGenerator {
 						__portionDisplacement = data[0]['portionDisplacement']
 						__«(exp as VariableDeclaration).name»_values = data[0]['portionValues']
 						__index = 0
-						«(exp as VariableDeclaration).name» = [None] * (__«(exp as VariableDeclaration).name»_rows * __«(exp as VariableDeclaration).name»_cols)
+						«(exp as VariableDeclaration).name» = [[0 for x in range(__«(exp as VariableDeclaration).name»_cols)] for y in range(__«(exp as VariableDeclaration).name»_rows)]
 						for __i in range(__«(exp as VariableDeclaration).name»_rows):
 							for __j in range(__«(exp as VariableDeclaration).name»_cols):
-								«(exp as VariableDeclaration).name»[__i*__«(exp as VariableDeclaration).name»_cols+__j] = __«(exp as VariableDeclaration).name»_values[__index]['value']
+								«(exp as VariableDeclaration).name»[__i][__j] = __«(exp as VariableDeclaration).name»_values[__index]['value']
 								__index+=1
 					«ELSE»
-				«(exp as VariableDeclaration).name» = data # TODO check
+						«(exp as VariableDeclaration).name» = data # TODO check
 					«ENDIF»
 				«ENDFOR»
 				«FOR exp : exps.expressions»
@@ -413,43 +349,13 @@ class FLYGeneratorPython extends AbstractGenerator {
 					__queue_service_client = __queue_service.get_queue_client('termination-"${function}"-"${id}"')
 					__queue_service_client.send_message('terminate')
 				«ENDIF»
-				«ELSE»
-				«FOR exp : parameters»
-«IF typeSystem.get(name).get((exp as VariableDeclaration).name).equals("Table") || typeSystem.get(name).get((exp as VariableDeclaration).name).equals("File")»
-__columns = data[0].keys()
-«(exp as VariableDeclaration).name» = pd.read_json(json.dumps(data))
-«(exp as VariableDeclaration).name» = «(exp as VariableDeclaration).name»[__columns]
-«ELSEIF  typeSystem.get(name).get((exp as VariableDeclaration).name).contains("Matrix")»
-__«(exp as VariableDeclaration).name»_matrix = data[0]
-__«(exp as VariableDeclaration).name»_rows = data[0]['rows']
-__«(exp as VariableDeclaration).name»_cols = data[0]['cols']
-__«(exp as VariableDeclaration).name»_values = data[0]['values']
-__index = 0
-«(exp as VariableDeclaration).name» = [None] * (__«(exp as VariableDeclaration).name»_rows * __«(exp as VariableDeclaration).name»_cols)
-for __i in range(__«(exp as VariableDeclaration).name»_rows):
-for __j in range(__«(exp as VariableDeclaration).name»_cols):
-«(exp as VariableDeclaration).name»[__i*__«(exp as VariableDeclaration).name»_cols+__j] = __«(exp as VariableDeclaration).name»_values[__index]['value']
-__index+=1
-«ELSE»
-«(exp as VariableDeclaration).name» = data # TODO check
-«ENDIF»
-«ENDFOR»
-«FOR exp : exps.expressions»
-«generatePyExpression(exp,name, local)»
-«ENDFOR»			
-«ENDIF»
-				
-				
 		'''
 	}
 
 	def generatePyExpression(Expression exp, String scope, boolean local) {
-					println( "expr env: " + env)
-		
 		var s = ''''''
 		if (exp instanceof ChannelSend) {
 			var env = (exp.target.environment.get(0).right as DeclarationObject).features.get(0).value_s ;//(exp.target as DeclarationObject).features.get(0).value_s;
-			println( "expr env: " + env)
 			s += '''			
 			«IF local»
 				«exp.target.name».write(json.dumps(«generatePyArithmeticExpression(exp.expression, scope, local)»).encode('utf8'))
@@ -476,10 +382,6 @@ __index+=1
 					)
 				«ENDIF»
 			«ELSEIF env=="azure"»
-			__queue_service_client = __queue_service.get_queue_client('«exp.target.name»-"${id}"')
-			__queue_service_client.send_message(«generatePyArithmeticExpression(exp.expression, scope, local)»)
-			«ELSEIF env=="k8s"»
-					redisClient.lpush('queue:jobs',«generatePyArithmeticExpression(exp.expression, scope, local)»)
 				__queue_service_client = __queue_service.get_queue_client('«exp.target.name»-"${id}"')
 				«IF exp.expression instanceof CastExpression && (exp.expression as CastExpression).type.equals("Array")»
 					__queue_service_client.send_message(json.dumps({'portionValues': «generatePyArithmeticExpression(exp.expression, scope, local)», 
@@ -544,8 +446,42 @@ __index+=1
 						s += '''«exp.name» = [None] * «generatePyArithmeticExpression(row, scope, local)» * «generatePyArithmeticExpression(col, scope, local)» *«generatePyArithmeticExpression(dep, scope, local)»'''
 					}
 					
-				} 
-				else if(exp.right instanceof DeclarationObject){
+				} else if(exp.right instanceof ArrayInit){
+					
+					if(((exp.right as ArrayInit).values.get(0) instanceof NumberLiteral) ||
+					((exp.right as ArrayInit).values.get(0) instanceof StringLiteral) ||
+					((exp.right as ArrayInit).values.get(0) instanceof FloatLiteral)){ //array init
+						var real_type = valuateArithmeticExpression((exp.right as ArrayInit).values.get(0) as ArithmeticExpression,scope,local)
+	
+						typeSystem.get(scope).put(exp.name,"Array_"+real_type)
+						s += '''
+							«exp.name» = [«FOR e: (exp.right as ArrayInit).values»«generatePyArithmeticExpression(e as ArithmeticExpression,scope,local)»«IF e != (exp.right as ArrayInit).values.last »,«ENDIF»«ENDFOR»]
+						'''
+					} else if ((exp.right as ArrayInit).values.get(0) instanceof ArrayValue){ //matrix 2d
+						if(((exp.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) instanceof NumberLiteral ||
+							((exp.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) instanceof StringLiteral ||
+							((exp.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) instanceof FloatLiteral){
+							var real_type = valuateArithmeticExpression(((exp.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) as ArithmeticExpression,scope, local)
+							var col = (((exp.right as ArrayInit).values.get(0) as ArrayValue).values.get(0) as ArrayValue).values.length
+							typeSystem.get(scope).put(exp.name,"Matrix_"+real_type+"_"+col)
+							s += '''«exp.name» = ['''
+							for (e : (exp.right as ArrayInit).values){
+								s+='''['''
+								for(e1: (e as ArrayValue).values){
+									s+=generatePyArithmeticExpression(e1 as ArithmeticExpression,scope,local)
+									if(e1!= (e as ArrayValue).values.last){
+										s+=''','''
+									}
+								}
+								s+=''']'''
+								if (e !=  (exp.right as ArrayInit).values.last){
+									s+=''','''
+								}
+							}
+							s+=''']'''
+						}	
+					}
+				} else if(exp.right instanceof DeclarationObject){
 					var type = (exp.right as DeclarationObject).features.get(0).value_s
 					
 					switch (type) {
@@ -1309,97 +1245,15 @@ __index+=1
 					for «(exp.index.indices.get(0) as VariableDeclaration).name» in «(exp.object as VariableLiteral).variable.name»:
 						«IF exp.body instanceof BlockExpression»
 						«FOR e: (exp.body as BlockExpression).expressions»
-							«generatePyExpression(e,scope, local)»
+						«generatePyExpression(e,scope, local)»
 						«ENDFOR»
 						«ELSE»
-							«generatePyExpression(exp.body,scope, local)»	
-						«ENDIF»
-				'''
-			}
-		} else if (exp.object instanceof RangeLiteral) {
-			val lRange = (exp.object as RangeLiteral).value1
-			val rRange = (exp.object as RangeLiteral).value2
-			return '''
-				for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(«lRange», «rRange»):
-					«IF exp.body instanceof BlockExpression»
-						«generatePyBlockExpression(exp.body as BlockExpression,scope, local)»
-					«ELSE»
 						«generatePyExpression(exp.body,scope, local)»
-					«ENDIF»
-			'''
-		} else if (exp.object instanceof VariableLiteral) {
-			println("Variable: "+ (exp.object as VariableLiteral).variable.name +" type: "+ typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name)) 
-			if (((exp.object as VariableLiteral).variable.typeobject.equals('var') &&
-				((exp.object as VariableLiteral).variable.right instanceof NameObjectDef) ) ||
-				typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("HashMap")) {
-				val variableName = (exp.index.indices.get(0) as VariableDeclaration).name
-				return '''
-					for «variableName»k, «variableName»v in «(exp.object as VariableLiteral).variable.name».items():
-						«(exp.index.indices.get(0) as VariableDeclaration).name» = {'k': «variableName»k, 'v': «variableName»v}
-						«IF exp.body instanceof BlockExpression»
-							«FOR e: (exp.body as BlockExpression).expressions»
-								«generatePyExpression(e,scope, local)»
-							«ENDFOR»
-						«ELSE»
-								«generatePyExpression(exp.body,scope, local)»	
 						«ENDIF»
-					
-				'''
-			} else if ((exp.object as VariableLiteral).variable.typeobject.equals('dat') || 
-				typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("Table")
-				) {
-				return '''
-				for «(exp.index.indices.get(0) as VariableDeclaration).name» in «(exp.object as VariableLiteral).variable.name».itertuples(index=False):
-					«IF exp.body instanceof BlockExpression»
-					«FOR e: (exp.body as BlockExpression).expressions»
-					«generatePyExpression(e,scope, local)»
-					«ENDFOR»
-					«ELSE»
-					«generatePyExpression(exp.body,scope, local)»
-					«ENDIF»
-				'''
-			} else if(typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("File") ){
-				return'''
-				for «(exp.index.indices.get(0) as VariableDeclaration).name» in «(exp.object as VariableLiteral).variable.name»:
-					«IF exp.body instanceof BlockExpression»
-					«FOR e: (exp.body as BlockExpression).expressions»
-					«generatePyExpression(e,scope, local)»
-					«ENDFOR»
-					«ELSE»
-					«generatePyExpression(exp.body,scope, local)»
-					«ENDIF»
-				'''
-			}else if (typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("Directory") ){
-				return '''
-				for «(exp.index.indices.get(0) as VariableDeclaration).name» in os.listdir(«(exp.object as VariableLiteral).variable.name»):
-					«IF exp.body instanceof BlockExpression»
-					«FOR e: (exp.body as BlockExpression).expressions»
-					«generatePyExpression(e,scope, local)»
-					«ENDFOR»
-					«ELSE»
-					«generatePyExpression(exp.body,scope, local)»
-					«ENDIF»
-				'''
-			} else if (typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("String[]") ){
-				return'''
-				for «(exp.index.indices.get(0) as VariableDeclaration).name» in «(exp.object as VariableLiteral).variable.name»:
-					«IF exp.body instanceof BlockExpression»
-					«FOR e: (exp.body as BlockExpression).expressions»
-					«generatePyExpression(e,scope, local)»
-					«ENDFOR»
-					«ELSE»
-					«generatePyExpression(exp.body,scope, local)»
-					«ENDIF»
-				'''
-			}
-		}
-		}else if(exp.index.indices.length == 2){
-			if(typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).contains("Matrix")){
-				var row = (exp.index.indices.get(0) as VariableDeclaration).name
-				var col = (exp.index.indices.get(1) as VariableDeclaration).name
-				return '''
-				for «row» in range(__«(exp.object as VariableLiteral).variable.name»_rows):
-					for «col» in range(__«(exp.object as VariableLiteral).variable.name»_cols):
+					'''
+				}else if (typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("Directory") ){
+					return '''
+					for «(exp.index.indices.get(0) as VariableDeclaration).name» in os.listdir(«(exp.object as VariableLiteral).variable.name»):
 						«IF exp.body instanceof BlockExpression»
 						«FOR e: (exp.body as BlockExpression).expressions»
 						«generatePyExpression(e,scope, local)»
@@ -1407,12 +1261,53 @@ __index+=1
 						«ELSE»
 						«generatePyExpression(exp.body,scope, local)»
 						«ENDIF»
+					'''
+				} else if (typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).equals("String[]") ){
+					return'''
+					for «(exp.index.indices.get(0) as VariableDeclaration).name» in «(exp.object as VariableLiteral).variable.name»:
+						«IF exp.body instanceof BlockExpression»
+						«FOR e: (exp.body as BlockExpression).expressions»
+						«generatePyExpression(e,scope, local)»
+						«ENDFOR»
+						«ELSE»
+						«generatePyExpression(exp.body,scope, local)»
+						«ENDIF»
+					'''
+				}else if(typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).contains("Array")){
+						var name = (exp.object as VariableLiteral).variable.name;
+					
+						return '''
+							for «(exp.index.indices.get(0) as VariableDeclaration).name» in range(len(«name»)):
+								«IF exp.body instanceof BlockExpression»
+									«FOR e: (exp.body as BlockExpression).expressions»
+										«generatePyExpression(e,scope, local)»
+									«ENDFOR»
+								«ELSE»
+									«generatePyExpression(exp.body,scope, local)»
+								«ENDIF»
+						'''
+				}	
+			}
+		}else if(exp.index.indices.length == 2){
+			if(typeSystem.get(scope).get((exp.object as VariableLiteral).variable.name).contains("Matrix")){
+				var row = (exp.index.indices.get(0) as VariableDeclaration).name
+				var col = (exp.index.indices.get(1) as VariableDeclaration).name
+				return '''
+				for «row» in range(len(«(exp.object as VariableLiteral).variable.name»)):
+					for «col» in range(len(«(exp.object as VariableLiteral).variable.name»[0])):
+						«IF exp.body instanceof BlockExpression»
+							«FOR e: (exp.body as BlockExpression).expressions»
+								«generatePyExpression(e,scope, local)»
+							«ENDFOR»
+						«ELSE»
+							«generatePyExpression(exp.body,scope, local)»
+						«ENDIF»
 				'''
 			}	
 		}
 		
 	}
-}
+
 	def generatePyBlockExpression(BlockExpression block, String scope, boolean local) {
 		'''
 		«FOR exp : block.expressions»
@@ -1506,7 +1401,7 @@ __index+=1
 				var i = generatePyArithmeticExpression(exp.indexes.get(0).value ,scope, local);
 				var j = generatePyArithmeticExpression(exp.indexes.get(1).value ,scope, local);
 	
-				return '''«(exp.name as VariableDeclaration).name»[(«i»*__«(exp.name as VariableDeclaration).name»_cols)+«j»]['value']'''
+				return '''«(exp.name as VariableDeclaration).name»[«i»][«j»]'''
 				
 				
 			} else { // matrix 3d
@@ -1526,7 +1421,7 @@ __index+=1
 				return '''«channelName».readline()'''
 			}
 			var env = ((exp.target.environment as VariableDeclaration).right as DeclarationObject).features.get(0).value_s
-			if(env.equals("aws") || env.equals("kubernetes")){ 
+			if(env.equals("aws")){ 
 				return '''«channelName».receive_messages()[0]'''
 			}else if(env.equals("azure")){
 				return '''
@@ -1701,6 +1596,7 @@ __index+=1
 	}
 	
 	def generatePyVariableFunction(VariableFunction expression, Boolean local, String scope) {
+
 		if (expression.target.right instanceof DeclarationObject) {
 			var type = (expression.target.right as DeclarationObject).features.get(0).value_s
 			
@@ -1912,7 +1808,6 @@ __index+=1
 						s += ")"
 						return s
 					}
-			} 
 		}else{
 			return generatePyArithmeticExpression(expression, scope, local)
 		}
@@ -1924,22 +1819,10 @@ __index+=1
 	'''
 	
 	def CharSequence compileScriptDeploy(Resource resource, String name, boolean local){
-		println("current env: " + env);
-		println("current right_env: " + right_env);
 		switch this.env {
 		   case "aws": AWSDeploy(resource,name,local,false)
 		   case "aws-debug": AWSDebugDeploy(resource,name,local,true)
 		   case "azure": AzureDeploy(resource,name,local)
-		   case "k8s": {
-		   	if(right_env.contains("smp"))
-		   		K8sDeploy(resource,name,false)
-		   	else if(right_env.contains("azure"))
-		   		K8sAzureDeploy(resource,name,false)
-		   	else if(right_env.contains("aws")){
-		   		K8sAWSDeploy(resource,name,false)
-		   		
-		   	}
-		   }
 		   default: this.env+" not supported"
   		}
 	} 	
@@ -2122,218 +2005,7 @@ __index+=1
 	rm rolePolicyDocument.json
 	rm policyDocument.json
 	'''
-	def CharSequence K8sDeploy(Resource resource, String name, boolean local)
-	'''
-	#!/bin/bash
-	echo "checking if Docker is on and fine ..."
-	docker info > /dev/null 2>&1
 	
-	if [ $? -eq 0 ]; then
-		echo "Docker is on :) continuing..."
-	else
-	     echo "Docker doesn't responding... :("
-	     exit 1
-	fi
-	
-	
-	echo "checking if Kubernetes is on and fine ..."
-	kubectl cluster-info > /dev/null 2>&1 #Da rivedere in caso il cluster non sia in locale
-	
-	if [ $? -eq 0 ]; then
-		echo "Kube says hello :) continuing..."
-	else
-	     echo "Kube has something wrong :("
-	     exit 1
-	fi
-	cd src-gen/
-	echo "launching Redis deployment..."
-	echo "«generateIntK8Service(resource)»" > int-svc.yaml
-	
-	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-pod.yaml
-	kubectl apply -f int-svc.yaml
-	
-	echo "Entering in the Python env"
-	echo "Generating Python code..."
-	echo "«generateBodyPy(root.body,root.parameters,name,env, local)»
-	
-	«FOR fd:functionCalled.values()»
-		
-	«generatePyExpression(fd, name, local)»
-	
-	«ENDFOR»
-	" > main.py
-	
-	echo "Python file created"
-	echo "Building and pushing the flying image"
-	
-	docker build -t fly_python . 
-	docker tag fly_python «registryName»/fly_python
-	docker push «registryName»/fly_python   
-    echo "it's the moment:"
-		    
-			export completions=«nreplicas»
-			export parallelism=«nparallels»
-			export registryName=«registryName»
-			
-			( echo "cat <<EOF >python.yaml";
-			  cat template.yaml;
-			  echo "EOF";
-			) >temp.yml
-			. temp.yml
-			cat python.yaml
-			
-			kubectl apply -f python.yaml
-			
-			echo "We are Flying!! :)"
-			kubectl wait --for=condition=complete --timeout=120s -f python.yaml
-			kubectl logs job/fly-job
-			rm -f python.yaml temp.yml template.yaml Dockerfile kubernetes_deploy.sh main.py  int-svc.yaml
-	
-	'''
-	def CharSequence K8sAWSDeploy(Resource resource, String name, boolean local){
-	'''
-	#!/bin/bash
-	
-	echo "checking if Docker is on and fine ..."
-	docker info > /dev/null 2>&1
-	
-	if [ $? -eq 0 ]; then
-		echo "Docker is on :) continuing..."
-	else
-	     echo "Docker doesn't responding... :("
-	     exit 1
-	fi
-	
-	
-	echo "checking if Kubernetes is on and fine ..."
-	aws eks update-kubeconfig --name Fly
-	kubectl cluster-info > /dev/null 2>&1 #Da rivedere in caso il cluster non sia in locale
-	
-	if [ $? -eq 0 ]; then
-		echo "Kube says hello :) continuing..."
-	else
-	     echo "Kube has something wrong :("
-	     exit 1
-	fi
-	echo "launching Redis deployment..."
-	cd src-gen/
-	echo "«generateExtK8Service(resource)»" > ext-svc.yaml
-	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-pod.yaml
-	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-service.yaml
-	kubectl apply -f ext-svc.yaml
-		
-	if [ $? -eq 0 ]; then
-		echo "Redis says hello :) continuing..."
-	else
-		    echo "Redis has something wrong :("
-		    exit 1
-	fi
-	echo "Entering in the Python env"
-	echo "Generating Python code..."
-	echo "«generateBodyPy(root.body,root.parameters,name,env, local)»
-	
-	«FOR fd:functionCalled.values()»
-		
-	«generatePyExpression(fd, name, local)»
-	
-	«ENDFOR»
-	" > main.py
-	
-	echo "Python file created"
-	echo "Building and pushing the flying image"
-		    
-		    echo "it's the moment:"
-		    
-			export completions=«nreplicas»
-			export parallelism=«nparallels»
-			export registryName=«registryName»
-			
-			( echo "cat <<EOF >python.yaml";
-			  cat template.yaml;
-			  echo "EOF";
-			) >temp.yml
-			. temp.yml
-			cat python.yaml
-			
-			kubectl apply -f python.yaml
-			echo "We are Flying!! :)"
-			kubectl wait --for=condition=complete --timeout=120s -f python.yaml
-			kubectl logs job/fly-job
-			rm -f python.yaml temp.yml template.yaml Dockerfile kubernetes_deploy.sh main.py ext-svc.yaml
-	'''
-	}
-	def CharSequence K8sAzureDeploy(Resource resource, String name, boolean local)
-	'''
-	#!/bin/bash
-	
-	echo "checking if Docker is on and fine ..."
-	docker info > /dev/null 2>&1
-	
-	if [ $? -eq 0 ]; then
-		echo "Docker is on :) continuing..."
-	else
-	     echo "Docker doesn't responding... :("
-	     exit 1
-	fi
-	
-	
-	echo "checking if Kubernetes is on and fine ..."
-	kubectl cluster-info > /dev/null 2>&1 #Da rivedere in caso il cluster non sia in locale
-	
-	if [ $? -eq 0 ]; then
-		echo "Kube says hello :) continuing..."
-	else
-	     echo "Kube has something wrong :("
-	     exit 1
-	fi
-	echo "launching Redis deployment..."
-	cd src-gen/
-	echo "«generateExtK8Service(resource)»" > ext-svc.yaml
-	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-pod.yaml
-	kubectl apply -f https://kubernetes.io/examples/application/job/redis/redis-service.yaml
-	kubectl apply -f ext-svc.yaml
-		
-	if [ $? -eq 0 ]; then
-		echo "Redis says hello :) continuing..."
-	else
-		    echo "Redis has something wrong :("
-		    exit 1
-	fi
-	echo "Entering in the Python env"
-	echo "Generating Python code..."
-	echo "«generateBodyPy(root.body,root.parameters,name,env, local)»
-	
-	«FOR fd:functionCalled.values()»
-		
-	«generatePyExpression(fd, name, local)»
-	
-	«ENDFOR»
-	" > main.py
-	
-	echo "Python file created"
-	echo "Building and pushing the flying image"
-		    az acr build --registry «registryName» --image fly_python .
-		    
-		    echo "it's the moment:"
-		    
-			export completions=«nreplicas»
-			export parallelism=«nparallels»
-			export registryName=«registryName»
-			
-			( echo "cat <<EOF >python.yaml";
-			  cat template.yaml;
-			  echo "EOF";
-			) >temp.yml
-			. temp.yml
-			cat python.yaml
-			
-			kubectl apply -f python.yaml
-			echo "We are Flying!! :)"
-			kubectl wait --for=condition=complete --timeout=120s -f python.yaml
-			kubectl logs job/fly-job
-			rm -f python.yaml temp.yml template.yaml Dockerfile kubernetes_deploy.sh main.py ext-svc.yaml
-	
-	'''
 	def CharSequence AWSDebugDeploy(Resource resource, String name, boolean local, boolean debug)
 	'''
 	#!/bin/bash
@@ -2545,75 +2217,8 @@ __index+=1
 	     
 	docker-compose up
 	'''
-		def CharSequence compileDockerTemplate(Resource resource){
-		'''
-		FROM python:3.8-slim-buster
-		MAINTAINER Luigi Barbato <l.barbato11@studenti.unisa.it>
-		WORKDIR /function
-		COPY requirements.txt requirements.txt
-		RUN pip3 install -r requirements.txt
-		COPY . .
-		CMD ["python3", "main.py"]
-		'''
-	}
-	def CharSequence generateExtK8Service(Resource resource){
-	'''
-	apiVersion: v1
-	kind: Service
-	metadata:
-	  name: public-svc
-	spec:
-	  type: LoadBalancer
-	  ports:
-	  - port: 6379
-	  selector:
-	    app: redis
-	'''
-	}
-	def CharSequence generateIntK8Service(Resource resource){
-	'''
-	apiVersion: v1
-	kind: Service
-	metadata:
-	  name: redis
-	  labels:
-	    app: redis
-	spec:
-	  type: NodePort
-	  ports:
-	    - port: 6379
-	      targetPort: 6379
-	      nodePort: 30014
-	      protocol: TCP
-	      name: redis
-	  selector:
-	    app: redis
-
-	'''
-	}		
-	   def CharSequence compileK8sJobTemplate(Resource resource){
-   	'''
-   	apiVersion: batch/v1
-   	kind: Job
-   	metadata:
-   	  name: fly-job
-   	spec:
-   	  ttlSecondsAfterFinished: 5
-   	  parallelism: ${parallelism}
-   	  completions: ${completions}
-   	  template:
-   	    metadata:
-   	      name: fly
-   	      labels:
-   	        jobgroup: fly
-   	    spec:
-   	      containers:
-   	        - name: fly-python
-   	          image: ${registryName}/fly_python
-   	          command: [ "python3", "./main.py" ]
-   	      restartPolicy: Never
-   	'''
-   }
+	
+	
 	def CharSequence AzureDeploy(Resource resource, String name, boolean local)
 	'''
 		#!/bin/bash
@@ -2813,7 +2418,18 @@ __index+=1
 				echo "delete lambda function: «res.target.name»_${id}"
 				aws lambda --profile ${user} delete-function --function-name «res.target.name»_${id}
 				
+				# delete S3 bucket if existent
+				functionLowerCase=${2,,}
+				if aws s3 ls "s3://${functionLowerCase}${id}bucket" 2>&1 | grep -q 'An error occurred'
+				then
+				    echo "bucket does not exist, no need to delete it"
+				else
+				    echo "bucket exist, so it has to be deleted"
+				    aws s3 rb s3://${functionLowerCase}${id}bucket --force
+				fi
 			«ENDFOR»
+			
+
 	'''
 	
 	def CharSequence AWSDebugUndeploy(Resource resource, String string, boolean local,boolean debug)'''
@@ -2822,20 +2438,12 @@ __index+=1
 	docker-compose down
 	docker network rm flynet
 	'''
-	def CharSequence K8sUndeploy(Resource resource, String string, boolean local)'''
-	#!/bin/bash
-	
-	kubectl delete job/fly-job
-	kubectl delete pod/redis-master
-	kubectl delete svc redis
-	kubectl delete svc public-svc
-	'''
+
 	def CharSequence compileScriptUndeploy(Resource resource, String name, boolean local){
 		switch this.env {
 			   case "aws": AWSUndeploy(resource,name,local,false)
 			   case "aws-debug": AWSDebugUndeploy(resource,name,local,true)
 			   case "azure": AzureUndeploy(resource,name,local)
-			   case "k8s": K8sUndeploy(resource,name,local)
 			   default: this.env+" not supported"
 	  		}
 	} 
